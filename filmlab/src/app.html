@@ -1,0 +1,1584 @@
+<title>FilmLab 胶片暗房</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&family=Share+Tech+Mono&display=swap">
+<style>
+:root{
+  /* Layout: one-screen camera body. Viewfinder on top, an engraved control deck in the middle, the shutter row at the bottom. */
+  --ink:#0f0d0c;      /* darkroom wall */
+  --deck:#181513;     /* control deck */
+  --deck-2:#221e1a;   /* raised controls */
+  --line:#36302a;     /* hairlines */
+  --metal:#ddd7cc;    /* engraved aluminium text */
+  --muted:#988f82;    /* secondary labels */
+  --amber:#f2a63b;    /* safelight amber */
+  --led:#ff6a3c;      /* LED digits */
+  --paper:#f3efe7;    /* print paper */
+  --film:#7b3f98;     /* box colour of the loaded film, set by script */
+  --font-engrave:"Saira Condensed","Arial Narrow","PingFang SC","Hiragino Sans GB",sans-serif;
+  --font-body:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-led:"Share Tech Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html{box-sizing:border-box;height:100%;background:var(--ink)}
+[hidden]{display:none!important}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;margin:0;background:var(--ink);color:var(--metal);font-family:var(--font-body);font-size:14px;line-height:1.45;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer}
+button:disabled{cursor:default;opacity:.4}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.led{font-family:var(--font-led);color:var(--led);text-shadow:0 0 6px rgba(255,90,40,.55);font-variant-numeric:tabular-nums}
+
+#app{height:100%;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:8px;padding-block:6px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:8px;min-height:40px}
+.brand{display:flex;flex-direction:column;line-height:1;flex:0 0 auto}
+.wordmark{font-family:var(--font-engrave);font-weight:700;font-size:20px;letter-spacing:.16em}
+.wordmark b{color:var(--amber);font-weight:700}
+.brand small{font-size:10px;letter-spacing:.32em;color:var(--muted);margin-top:4px}
+.film-chip{margin-left:auto;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border:1px solid var(--line);border-radius:999px;background:var(--deck);min-width:0;max-width:62%}
+.film-chip .sw{flex:0 0 auto;width:14px;height:14px;border-radius:3px;background:var(--film);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}
+.film-chip .nm{font-family:var(--font-engrave);font-weight:600;font-size:15px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.film-chip .mt{font-family:var(--font-led);font-size:11px;color:var(--muted);white-space:nowrap}
+.icon-btn{flex:0 0 auto;width:34px;height:34px;display:grid;place-items:center;border-radius:10px;color:var(--muted)}
+.icon-btn svg{width:20px;height:20px}
+.icon-btn[aria-pressed="false"] .on,.icon-btn[aria-pressed="true"] .off{display:none}
+
+/* viewfinder */
+.viewfinder{position:relative;flex:1 1 auto;min-height:170px;border-radius:14px;background:#080706;overflow:hidden;display:grid;place-items:center;box-shadow:inset 0 0 0 1px #2a2622}
+.viewfinder::before,.viewfinder::after{content:"";position:absolute;width:18px;height:18px;border:1.5px solid rgba(221,215,204,.25);pointer-events:none}
+.viewfinder::before{top:8px;left:8px;border-right:0;border-bottom:0}
+.viewfinder::after{bottom:8px;right:8px;border-left:0;border-top:0}
+#view{display:block;touch-action:none;box-shadow:0 8px 28px rgba(0,0,0,.55)}
+.vf-tl,.vf-tr{position:absolute;top:10px;display:flex;gap:6px;align-items:center}
+.vf-tl{left:12px}.vf-tr{right:12px}
+.vf-btn,.badge{font-size:11px;line-height:1;padding:6px 9px;border-radius:999px;background:rgba(15,13,12,.72);border:1px solid rgba(255,255,255,.1);color:var(--metal);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.badge{color:var(--muted)}
+.vf-hint{position:absolute;left:12px;bottom:10px;font-size:11px;color:rgba(232,226,215,.75);text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none}
+.vf-live{position:absolute;right:12px;bottom:10px;font-family:var(--font-led);font-size:11px;color:var(--led)}
+.toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);display:flex;gap:10px;align-items:center;font-size:12.5px;padding:8px 12px;border-radius:10px;background:rgba(24,21,19,.94);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:5}
+.toast button{color:var(--amber);font-weight:600;white-space:nowrap}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.flash.go{animation:flash .35s ease-out}
+@keyframes flash{0%{opacity:.85}100%{opacity:0}}
+
+/* tabs and deck */
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--deck);border-radius:12px;padding:4px;border:1px solid var(--line)}
+.tab{height:32px;border-radius:9px;font-size:13px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:5px}
+.tab span{font-family:var(--font-engrave);font-size:10.5px;letter-spacing:.12em;opacity:.65}
+.tab[aria-selected="true"]{background:var(--deck-2);color:var(--metal);box-shadow:inset 0 -2px 0 var(--amber)}
+.deck{position:relative;flex:0 0 auto;height:212px;background:var(--deck);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.pane{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 12px;-webkit-overflow-scrolling:touch}
+.pane-label{font-family:var(--font-engrave);font-size:10px;letter-spacing:.24em;color:var(--muted)}
+
+/* film pane */
+#pane-film{padding:0}
+#dial{display:block;width:100%;height:132px;touch-action:none;cursor:grab}
+#dial:active{cursor:grabbing}
+.film-info{padding:2px 14px 10px}
+.fi-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fi-name{font-family:var(--font-engrave);font-weight:700;font-size:18px;letter-spacing:.04em;color:var(--metal)}
+.fi-tags{font-size:11.5px;color:var(--muted)}
+.fi-desc{margin:3px 0 0;font-size:12.5px;line-height:1.5;color:#bdb5a8;text-wrap:pretty}
+
+/* darkroom pane */
+.dk-head{display:flex;align-items:center;gap:6px;min-height:26px}
+.dk-proc{font-size:12.5px;font-weight:600;color:var(--metal);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk-hint{font-size:10.5px;color:var(--muted)}
+.knobs{display:flex;justify-content:space-around;gap:4px;margin:6px 0 4px}
+.knob{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px}
+.k-label{font-family:var(--font-engrave);font-size:11.5px;font-weight:600;letter-spacing:.12em;color:var(--metal);line-height:1.2}
+.k-label small{font-family:var(--font-body);font-size:10px;letter-spacing:0;color:var(--muted);margin-left:3px;font-weight:400}
+.k-cv{width:52px;height:52px;touch-action:none;cursor:ns-resize;border-radius:50%}
+.k-val{font-size:13px;line-height:1.1;min-width:50px;text-align:center;padding:2px 4px;border-radius:4px;background:#0b0908;box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
+.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.scroll-row{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-12px;padding-inline:12px}
+.scroll-row::-webkit-scrollbar{display:none}
+.scroll-row>*{flex:0 0 auto;white-space:nowrap}
+.divider{flex:0 0 1px;align-self:stretch;margin:4px 4px;background:var(--line)}
+.row .pane-label{margin-right:2px}
+.chip{font-size:11.5px;padding:5px 9px;border-radius:999px;border:1px solid var(--line);color:#c3bbaf;background:transparent;white-space:nowrap}
+.chip[aria-pressed="true"]{border-color:var(--amber);color:var(--amber);background:rgba(242,166,59,.08)}
+.pill{font-size:11.5px;padding:5px 10px;border-radius:8px;background:var(--deck-2);border:1px solid var(--line);color:var(--metal);white-space:nowrap}
+.pill[aria-pressed="true"]{color:#1a1208;background:var(--amber);border-color:var(--amber)}
+.spacer{flex:1}
+
+/* effects pane */
+.fx-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px}
+.fx{display:flex;flex-direction:column;gap:0;min-width:0}
+.fx-top{display:flex;justify-content:space-between;font-size:11.5px;line-height:1.3;color:#c3bbaf}
+.fx-top output{font-family:var(--font-led);color:var(--amber);font-size:12px}
+.fx input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;margin:0}
+.fx input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--amber) 0 var(--p,0%),#3a342e var(--p,0%) 100%)}
+.fx input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;margin-top:-7.5px;background:radial-gradient(circle at 40% 35%,#f4efe6,#b9b2a6);box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.fx input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:#3a342e}
+.fx input[type=range]::-moz-range-progress{height:3px;background:var(--amber)}
+.fx input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:50%;background:#e9e3d8}
+.pill .led{font-size:10.5px;margin-left:4px}
+.pill[aria-pressed="true"] .led{color:#3a1a05;text-shadow:none}
+
+/* frames pane */
+.frames{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.frame-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 6px;border-radius:10px;border:1px solid var(--line);font-size:11.5px;color:#c3bbaf}
+.frame-card[aria-pressed="true"]{border-color:var(--amber);color:var(--amber);background:rgba(242,166,59,.06)}
+.frame-card svg{width:54px;height:34px}
+
+/* shutter row */
+.shutter-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 4px;min-height:84px}
+.side-btn{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+#libBtn{justify-self:start}#camBtn{justify-self:end}
+.thumb{width:46px;height:46px;border-radius:10px;border:1.5px solid var(--line);background:#000 center/cover no-repeat;display:grid;place-items:center;color:var(--metal)}
+.thumb svg{width:22px;height:22px}
+.shutter-wrap{display:flex;flex-direction:column;align-items:center;gap:5px}
+.shutter{width:68px;height:68px;border-radius:50%;position:relative;background:radial-gradient(circle at 35% 30%,#4a453f,#1c1916 70%);box-shadow:0 0 0 3px #2b2723,0 0 0 5px #4f4840,0 6px 16px rgba(0,0,0,.5)}
+.shutter .core{position:absolute;inset:10px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffd38a,var(--amber) 55%,#b86c14);box-shadow:inset 0 -3px 6px rgba(0,0,0,.35);transition:transform .12s}
+.shutter.live .core{background:radial-gradient(circle at 40% 35%,#fff,#e8e4dc 60%,#a9a399)}
+.shutter:active .core{transform:scale(.9)}
+.shutter-label{font-family:var(--font-engrave);font-size:11px;letter-spacing:.2em;color:var(--metal)}
+
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-y:auto;padding-top:calc(env(safe-area-inset-top,0px) + 16px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 16px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:rgba(8,7,6,.86);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.sheet-card{width:100%;max-width:520px;max-height:100%;overflow-y:auto;background:var(--deck);border:1px solid var(--line);border-radius:16px;padding:16px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sheet-head h2{margin:0;font-size:17px;font-weight:600;text-wrap:balance}
+.sheet-sub{margin:6px 0 12px;font-size:12.5px;color:var(--muted)}
+.ring-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ring-tile{display:flex;flex-direction:column;gap:4px;align-items:stretch;padding:4px;border-radius:8px;border:1px solid var(--line);background:#0c0a09}
+.ring-tile canvas{width:100%;height:auto;display:block;border-radius:4px;background:#000}
+.ring-tile span{font-size:11px;color:#c3bbaf;text-align:center}
+.ring-tile.cur{border-color:var(--amber)}
+.ring-tile.cur span{color:var(--amber)}
+.help h3{margin:16px 0 6px;font-size:13px;color:var(--amber);font-weight:600}
+.help p,.help li{font-size:13px;line-height:1.65;color:#cfc8bc;max-width:62ch}
+.help ol,.help ul{margin:0;padding-left:20px}
+.help .fine{font-size:11.5px;color:var(--muted)}
+
+/* develop */
+.develop{background:#151110;transition:background 1.2s ease}
+.develop.safe{background:radial-gradient(120% 80% at 50% 0%,#4b0c05 0%,#1b0403 55%,#0a0101 100%)}
+.dev-stage{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:560px}
+.dev-timer{display:flex;align-items:baseline;gap:12px;padding:6px 14px;border-radius:8px;background:#060404;box-shadow:inset 0 1px 3px rgba(0,0,0,.8),0 0 0 1px #2b1714}
+.dev-timer .led{font-size:26px;letter-spacing:.06em}
+.dev-step{font-size:13px;color:#d9a08f;min-width:5em}
+.tray{padding:16px;border-radius:14px;background:linear-gradient(#2a2724,#121010);box-shadow:inset 0 2px 0 rgba(255,255,255,.05),inset 0 -10px 30px rgba(0,0,0,.6),0 24px 50px rgba(0,0,0,.6);max-width:100%}
+.develop.safe .tray{animation:rock 2.4s ease-in-out infinite}
+@keyframes rock{0%,100%{transform:rotate(-.5deg)}50%{transform:rotate(.5deg)}}
+.print{position:relative;overflow:hidden;background:var(--paper);line-height:0}
+.print img{display:block;max-width:min(84vw,520px);max-height:56vh;width:auto;height:auto;opacity:0;filter:brightness(1.9) contrast(.35);-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}
+.print.emerge img{transition:opacity 2.4s ease-in,filter 2.8s ease-out;opacity:1;filter:none}
+.print.done img{opacity:1;filter:none;transition:none}
+.safelight{position:absolute;inset:0;background:#ff2a12;mix-blend-mode:multiply;opacity:0;transition:opacity 1.2s ease;pointer-events:none}
+.develop.safe .safelight{opacity:1}
+.sheen{position:absolute;inset:-30%;background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.14) 50%,transparent 58%);opacity:0;pointer-events:none}
+.develop.safe .sheen{opacity:1;animation:sheen 2.4s ease-in-out infinite}
+@keyframes sheen{0%{transform:translateX(-30%)}50%{transform:translateX(30%)}100%{transform:translateX(-30%)}}
+.enlarger{position:absolute;inset:0;background:radial-gradient(closest-side,rgba(255,250,235,.95),rgba(255,245,220,.5) 70%,transparent);opacity:0;pointer-events:none}
+.develop.expose .enlarger{opacity:1;transition:opacity .25s}
+.dev-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;visibility:hidden}
+.dev-actions.show{visibility:visible}
+.btn{font-size:14px;font-weight:600;padding:11px 18px;border-radius:12px;background:var(--deck-2);border:1px solid var(--line);color:var(--metal)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#1b1206}
+.dev-tip{margin:0;font-size:11.5px;color:rgba(221,215,204,.55);text-align:center}
+.dev-meta{margin:0;font-family:var(--font-led);font-size:11px;color:var(--muted);text-align:center}
+
+@media (max-width:429px){.film-chip .mt{display:none}}
+@media (max-width:374px){.deck{height:204px}.brand small{display:none}}
+@media (min-aspect-ratio:5/4) and (min-width:640px){
+  #app{max-width:1280px;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,400px);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"top top" "vf tabs" "vf deck" "vf shut";column-gap:16px}
+  .top{grid-area:top}.viewfinder{grid-area:vf;min-height:0}.tabs{grid-area:tabs}.deck{grid-area:deck;height:auto;min-height:200px}.shutter-row{grid-area:shut}
+}
+@media (prefers-reduced-motion:reduce){.develop.safe .tray,.develop.safe .sheen{animation:none}}
+</style>
+
+<div id="app">
+  <header class="top">
+    <div class="brand"><span class="wordmark">FILM<b>LAB</b></span><small>胶片暗房</small></div>
+    <button class="film-chip" id="filmChip" aria-label="当前胶片，点击打开胶片转盘"><i class="sw"></i><span class="nm" id="chipName">VELVIA 100</span><span class="mt" id="chipMeta">E-6 · 100</span></button>
+    <button class="icon-btn" id="soundBtn" aria-pressed="true" aria-label="声音">
+      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg>
+      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+    </button>
+    <button class="icon-btn" id="helpBtn" aria-label="使用说明"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6"/><circle cx="12" cy="16.9" r=".6" fill="currentColor"/></svg></button>
+  </header>
+
+  <section class="viewfinder" id="viewfinder" aria-label="取景器">
+    <canvas id="view" aria-label="胶片效果预览"></canvas>
+    <div class="vf-tl"><span class="badge" id="srcBadge">样张</span><button class="vf-btn" id="nextSample">换一张样张</button></div>
+    <div class="vf-tr"><button class="vf-btn" id="flipBtn" hidden>前后镜头</button></div>
+    <div class="vf-hint" id="vfHint">按住画面查看原图</div>
+    <div class="vf-live" id="liveTag" hidden>● LIVE</div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="flash" id="flash"></div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="控制面板">
+    <button class="tab" role="tab" id="tab-film" aria-controls="pane-film" aria-selected="true">胶片<span>FILM</span></button>
+    <button class="tab" role="tab" id="tab-dark" aria-controls="pane-dark" aria-selected="false">暗房<span>DARK</span></button>
+    <button class="tab" role="tab" id="tab-fx" aria-controls="pane-fx" aria-selected="false">效果<span>FX</span></button>
+    <button class="tab" role="tab" id="tab-frame" aria-controls="pane-frame" aria-selected="false">相框<span>FRAME</span></button>
+  </nav>
+
+  <section class="deck">
+    <div class="pane" id="pane-film" role="tabpanel" aria-labelledby="tab-film">
+      <canvas id="dial" tabindex="0" role="slider" aria-label="胶片模拟转盘" aria-valuemin="1" aria-valuemax="28"></canvas>
+      <div class="film-info">
+        <div class="fi-top"><span class="fi-name" id="fiName">Velvia 100</span><span class="fi-tags" id="fiTags"></span></div>
+        <p class="fi-desc" id="fiDesc"></p>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-dark" role="tabpanel" aria-labelledby="tab-dark" hidden>
+      <div class="dk-head"><span class="dk-proc" id="dkProc"></span><span class="spacer"></span><span id="dkActions" class="row" style="margin:0;flex-wrap:nowrap"></span></div>
+      <div class="dk-hint" id="dkHint"></div>
+      <div class="knobs" id="knobs"></div>
+      <div class="row scroll-row" id="paperRow"></div>
+    </div>
+
+    <div class="pane" id="pane-fx" role="tabpanel" aria-labelledby="tab-fx" hidden>
+      <div class="fx-grid" id="fxGrid"></div>
+      <div class="row" style="margin-top:6px">
+        <button class="pill" id="dateToggle" aria-pressed="false">日期戳<span class="led" id="dateSample"></span></button>
+        <span class="spacer"></span>
+        <button class="pill" id="leakShuffle">换一种漏光</button>
+        <button class="pill" id="fxReset">恢复胶片默认</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-frame" role="tabpanel" aria-labelledby="tab-frame" hidden>
+      <div class="frames" id="frames"></div>
+      <div class="row" id="aspectRow" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <footer class="shutter-row">
+    <button class="side-btn" id="libBtn" aria-label="从相册选择照片"><span class="thumb" id="libThumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/></svg></span>相册</button>
+    <div class="shutter-wrap">
+      <button class="shutter" id="shutter" aria-label="冲印这张照片"><span class="core"></span></button>
+      <span class="shutter-label" id="shutterLabel">冲 印</span>
+    </div>
+    <button class="side-btn" id="camBtn" aria-label="打开相机"><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.8" r="3.6"/></svg></span><span id="camLabel">相机</span></button>
+  </footer>
+</div>
+
+<input type="file" id="fileIn" accept="image/*" hidden>
+<input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+<video id="video" playsinline muted autoplay style="position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:0;top:0"></video>
+
+<div class="overlay develop" id="dev" hidden role="dialog" aria-modal="true" aria-label="冲印">
+  <div class="dev-stage">
+    <div class="dev-timer"><span class="led" id="devClock">00:00</span><span class="dev-step" id="devStep">曝光</span></div>
+    <div class="tray"><div class="print" id="devPrint"><img id="devImg" alt="冲印好的照片"><div class="safelight"></div><div class="sheen"></div><div class="enlarger"></div></div></div>
+    <p class="dev-meta" id="devMeta"></p>
+    <div class="dev-actions" id="devActions">
+      <button class="btn primary" id="saveBtn">保存照片</button>
+      <button class="btn" id="shareBtn" hidden>分享</button>
+      <button class="btn" id="closeDev">继续调整</button>
+    </div>
+    <p class="dev-tip" id="devTip">轻点任意处跳过显影动画</p>
+  </div>
+</div>
+
+<div class="overlay" id="ring" hidden role="dialog" aria-modal="true" aria-labelledby="ringTitle">
+  <div class="sheet-card">
+    <div class="sheet-head"><h2 id="ringTitle">色环对照</h2><button class="icon-btn" data-close aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p class="sheet-sub">暗房里调色靠环形色卡：九张样片各差一点滤光或曝光。挑一张看起来最自然的，点它就会套用到放大机上。</p>
+    <div class="ring-grid" id="ringGrid"></div>
+  </div>
+</div>
+
+<div class="overlay" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="sheet-card help">
+    <div class="sheet-head"><h2 id="helpTitle">FilmLab 使用说明</h2><button class="icon-btn" data-close aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <h3>拍一张胶片照片</h3>
+    <ol>
+      <li>点「相册」选照片，或点「相机」实时取景拍摄。</li>
+      <li>在「胶片」页转动转盘，28 种胶片随转随看。</li>
+      <li>「暗房」像彩色放大机一样调色，「效果」加颗粒、光晕、漏光，「相框」套上底片边。</li>
+      <li>按中间的琥珀色按钮「冲印」，看照片在显影盘里慢慢浮现，然后保存。</li>
+    </ol>
+    <h3>彩色暗房小知识</h3>
+    <ul>
+      <li>负片放大（RA-4）：照片偏什么色就加什么色的滤镜。偏黄加 Y，偏品红加 M。曝光时间越长，照片越暗。</li>
+      <li>正片直接放大（Ilfochrome）规律相反：偏黄就减 Y，曝光越久越亮。</li>
+      <li>黑白多级相纸：反差等级 00 最柔、5 最硬，可以做硒调、棕调、金调和蓝晒调色。</li>
+      <li>试条：一次在画面上比较五档曝光时间，点中最好的一档。色环：九宫格对照，挑最自然的一张。</li>
+      <li>双击旋钮恢复标准滤光。</li>
+    </ul>
+    <h3>装到 iPhone 主屏幕</h3>
+    <p>用 Safari 打开 FilmLab 的网址，点底部的「分享」按钮，选「添加到主屏幕」。之后它就像普通 App 一样全屏打开，离线也能用。</p>
+    <p class="fine">胶片效果是对色彩风格的模拟，与各胶片厂商无关。样张来源：NASA 与 SpaceX（公有领域），Rachel Michetti 与 Stefan van der Walt（CC0）。</p>
+  </div>
+</div>
+
+<script src="samples.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ---------- small helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const TAU = Math.PI * 2;
+const wrapPi = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const framed = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+const pad2 = n => String(n).padStart(2, '0');
+
+/* ---------- film stocks ---------- */
+const BASE = { exp: 0, wb: [1, 1, 1], mat: null, slope: [1, 1, 1], offset: [0, 0, 0], power: [1, 1, 1], contrast: 0, pivot: 0.45, sat: 1, hsl: {}, shadow: [0, 0, 0], high: [0, 0, 0], black: 0, white: 1, bw: null, grain: 0.25, gsize: 1.1, gcolor: 0.3, halation: 0.12, halColor: [1, 0.32, 0.12], halThresh: 0.62, vignette: 0.1 };
+const film = (id, name, dial, brand, code, kind, process, iso, color, desc, p) => ({ id, name, dial, brand, code, kind, process, iso, color, desc, p: Object.assign({}, BASE, p) });
+const FILMS = [
+  film('velvia50', 'Velvia 50', 'VELVIA 50', 'FUJIFILM', 'RVP 50', 'slide', 'E-6', 50, '#2f7a52',
+    '风光摄影的传奇反转片：极高饱和、反差厚重，绿叶浓郁、天空深邃。',
+    { exp: -0.15, wb: [1.03, 1, 0.96], contrast: 0.55, pivot: 0.42, sat: 1.38, hsl: { r: [-4, .15, -.06], y: [-6, .12, 0], g: [4, .35, -.1], c: [0, .2, -.06], b: [8, .25, -.15], m: [0, .2, 0] }, shadow: [.012, -.006, .016], grain: .12, gsize: .8, halation: .05 }),
+  film('velvia100', 'Velvia 100', 'VELVIA 100', 'FUJIFILM', 'RVP100', 'slide', 'E-6', 100, '#7b3f98',
+    '更鲜艳利落的 Velvia：红色带一点品红，蓝天更纯，颗粒细腻，风光与花卉的首选。',
+    { exp: -0.1, wb: [1, 0.99, 1.01], offset: [.004, -.006, .004], contrast: 0.48, pivot: 0.43, sat: 1.36, hsl: { r: [-7, .2, -.05], y: [-3, .1, 0], g: [3, .3, -.07], c: [-2, .2, -.05], b: [5, .25, -.12], m: [0, .15, 0] }, shadow: [.008, -.004, .014], grain: .11, gsize: .8, halation: .05 }),
+  film('provia', 'Provia 100F', 'PROVIA', 'FUJIFILM', 'RDP III', 'slide', 'E-6', 100, '#2b65b0',
+    '标准中性的专业反转片：色彩准确、反差适中，什么都能拍。',
+    { wb: [0.99, 1, 1.02], contrast: 0.25, sat: 1.12, hsl: { g: [0, .06, 0], b: [-2, .08, -.04] }, black: .008, grain: .11, gsize: .8 }),
+  film('astia', 'Astia 100F', 'ASTIA', 'FUJIFILM', 'RAP F', 'slide', 'E-6', 100, '#c8607f',
+    '柔和反差的人像反转片：肤色细腻，高光过渡温柔。',
+    { wb: [1.01, 1, 0.99], contrast: 0.08, sat: 1.04, hsl: { r: [2, -.05, .03], y: [0, -.05, .03], b: [0, .1, -.03] }, high: [.006, .003, -.002], black: .015, grain: .1, gsize: .8 }),
+  film('pro400h', 'Pro 400H', 'PRO 400H', 'FUJIFILM', 'PRO 400H', 'neg', 'C-41', 400, '#6fae8c',
+    '清新通透的婚礼胶片：粉彩色调，绿色偏薄荷青，阴影透着青蓝。',
+    { exp: .15, wb: [.98, 1.01, 1.02], contrast: -0.12, sat: .88, hsl: { r: [0, -.05, .03], y: [6, -.1, .04], g: [12, -.1, .06], b: [-6, -.05, .04] }, shadow: [-.01, .008, .012], high: [.01, .005, -.005], black: .04, white: .97, grain: .3, gsize: 1.2 }),
+  film('superia', 'Superia 400', 'SUPERIA', 'FUJIFILM', 'X-TRA 400', 'neg', 'C-41', 400, '#2f9b54',
+    '富士经典民用负片：绿色偏青、色彩讨喜，带着街拍的颗粒感。',
+    { contrast: .15, sat: 1.1, hsl: { r: [2, .08, 0], g: [10, .05, -.04], c: [0, .1, -.03], b: [-4, .05, 0] }, shadow: [-.006, .01, .012], high: [.01, .004, -.01], black: .025, grain: .38, gsize: 1.35 }),
+  film('c200', 'Fujicolor C200', 'C200', 'FUJIFILM', 'C200', 'neg', 'C-41', 200, '#3aa37a',
+    '入门民用负片：略带绿调，淡淡的复古感。',
+    { wb: [.98, 1.02, .99], contrast: .08, sat: .98, hsl: { g: [8, 0, 0] }, shadow: [-.005, .01, .006], black: .03, grain: .32, gsize: 1.25 }),
+  film('chrome', 'Classic Chrome', 'CL.CHROME', 'FUJIFILM', 'CLASSIC CHROME', 'slide', 'E-6', 160, '#8b877c',
+    '富士相机里的经典色彩：低饱和、阴影硬朗，蓝色偏青，像老杂志里的纪实照片。',
+    { contrast: .22, sat: .78, hsl: { r: [-2, .05, -.08], y: [-4, -.2, 0], g: [-6, -.3, -.04], c: [0, -.1, 0], b: [-14, -.05, -.08] }, shadow: [-.005, 0, .01], high: [.01, .005, -.01], black: .01, grain: .18, gsize: 1 }),
+  film('classicneg', 'Classic Neg.', 'CL.NEG', 'FUJIFILM', 'CLASSIC NEG', 'neg', 'C-41', 400, '#4f7f8a',
+    '仿负片冲扫的影调：高光偏暖、阴影偏青，色彩分离强烈。',
+    { contrast: .3, sat: .95, hsl: { r: [-6, .1, -.06], y: [4, -.15, 0], g: [16, -.1, -.06], c: [0, .05, -.05], b: [-8, .05, -.05] }, shadow: [-.01, .006, .014], high: [.02, .008, -.012], black: .025, white: .98, grain: .28, gsize: 1.2 }),
+  film('nostalgic', 'Nostalgic Neg.', 'NOSTALGIC', 'FUJIFILM', 'NOSTALGIC NEG', 'neg', 'C-41', 400, '#c48a3e',
+    '琥珀色的高光、浓郁的暗部，70 年代美国新彩色摄影的味道。',
+    { wb: [1.03, 1, .95], contrast: .1, sat: 1, hsl: { r: [0, .1, 0], y: [-4, .1, .03], b: [0, -.1, 0] }, high: [.03, .012, -.03], black: .025, grain: .25 }),
+  film('eterna', 'Eterna 250D', 'ETERNA', 'FUJIFILM', 'ETERNA 250D', 'neg', 'ECN-2', 250, '#4c6b7c',
+    '电影负片的低反差、低饱和影调，阴影带青，画面像电影截图。',
+    { contrast: -.25, sat: .72, hsl: { r: [0, -.05, 0], g: [8, -.2, 0], b: [-6, -.1, 0] }, shadow: [-.008, .006, .01], high: [.006, .004, -.004], black: .035, white: .97, grain: .2 }),
+  film('acros', 'Neopan Acros 100', 'ACROS', 'FUJIFILM', 'ACROS 100', 'bw', 'B&W', 100, '#6d6a66',
+    '颗粒极细的黑白片：层次丰富，暗部干净。',
+    { bw: [.34, .56, .10], contrast: .3, grain: .22, gsize: .85, halation: .04 }),
+  film('portra160', 'Portra 160', 'PORTRA 160', 'KODAK', 'PORTRA 160', 'neg', 'C-41', 160, '#e9b44c',
+    '低反差、肤色自然的专业人像负片，适合光线充足的场景。',
+    { contrast: -.1, sat: .92, wb: [1.01, 1, .99], hsl: { r: [3, -.05, .03], y: [-2, -.05, .03], g: [-6, -.18, 0], b: [-4, -.05, .02] }, shadow: [.004, 0, .006], high: [.012, .006, -.006], black: .03, white: .975, grain: .18, gsize: .95 }),
+  film('portra400', 'Portra 400', 'PORTRA 400', 'KODAK', 'PORTRA 400', 'neg', 'C-41', 400, '#f0b23c',
+    '最受欢迎的人像负片：暖调、奶油般的肤色，宽容度极高。',
+    { exp: .1, contrast: -.08, sat: .95, wb: [1.045, 1, .94], hsl: { r: [4, -.04, .04], y: [-4, 0, .04], g: [-10, -.2, 0], c: [-6, -.1, 0], b: [-6, -.08, .02] }, shadow: [0, .004, .01], high: [.025, .012, -.015], black: .035, white: .975, grain: .3, gsize: 1.15 }),
+  film('portra800', 'Portra 800', 'PORTRA 800', 'KODAK', 'PORTRA 800', 'neg', 'C-41', 800, '#e0952e',
+    '高速人像负片：色彩更浓、颗粒更明显，夜景也能拍。',
+    { contrast: .05, sat: 1.05, wb: [1.04, 1, .95], hsl: { r: [4, .05, .03], y: [-4, .05, .03], g: [-10, -.15, 0], b: [-6, 0, 0] }, shadow: [.002, .004, .012], high: [.02, .01, -.012], black: .04, white: .975, grain: .45, gsize: 1.5, halation: .2 }),
+  film('ektar', 'Ektar 100', 'EKTAR', 'KODAK', 'EKTAR 100', 'neg', 'C-41', 100, '#d9472d',
+    '号称颗粒最细的负片：饱和鲜艳，红色与蓝色尤其浓烈。',
+    { contrast: .35, sat: 1.3, wb: [1, 1, 1.01], hsl: { r: [-4, .25, -.04], y: [-2, .1, 0], g: [-2, .1, -.04], c: [0, .15, 0], b: [4, .25, -.08] }, black: .01, grain: .14, gsize: .85 }),
+  film('gold', 'Gold 200', 'GOLD', 'KODAK', 'GOLD 200', 'neg', 'C-41', 200, '#f2b51b',
+    '金黄色的阳光感，民用负片里最有夏天味道的一卷。',
+    { exp: .05, contrast: .12, sat: 1.08, wb: [1.06, 1.01, .9], hsl: { r: [4, .05, 0], y: [-6, .15, .04], g: [-10, -.05, 0], b: [0, -.05, 0] }, high: [.02, .012, -.02], black: .03, grain: .32, gsize: 1.25 }),
+  film('ultramax', 'Ultramax 400', 'ULTRAMAX', 'KODAK', 'UL 400', 'neg', 'C-41', 400, '#e1501f',
+    '温暖鲜艳的民用负片，颗粒明显，日常随拍的老朋友。',
+    { contrast: .18, sat: 1.12, wb: [1.04, 1, .93], hsl: { r: [0, .1, 0], y: [-4, .1, 0], g: [-6, 0, 0], b: [0, .05, -.03] }, shadow: [.005, 0, .01], black: .03, grain: .42, gsize: 1.4 }),
+  film('kodachrome', 'Kodachrome 64', 'K-CHROME', 'KODAK', 'KR 64', 'slide', 'K-14', 64, '#d4a017',
+    '已停产的传奇反转片：深红、金黄、浓郁的蓝天，反差硬朗。',
+    { contrast: .45, pivot: .42, sat: 1.18, wb: [1.03, 1, .96], hsl: { r: [-6, .25, -.1], y: [-8, .12, 0], g: [-8, -.05, -.06], c: [0, 0, -.04], b: [-2, .15, -.14] }, shadow: [.006, 0, -.004], grain: .16, gsize: .9 }),
+  film('e100', 'Ektachrome E100', 'E100', 'KODAK', 'E100', 'slide', 'E-6', 100, '#3478c6',
+    '干净通透的现代反转片：色彩准确，略微偏冷。',
+    { contrast: .3, sat: 1.15, wb: [.98, 1, 1.03], hsl: { g: [2, .08, 0], c: [0, .1, 0], b: [-4, .15, -.06] }, grain: .1, gsize: .8 }),
+  film('trix', 'Tri-X 400', 'TRI-X', 'KODAK', '400TX', 'bw', 'B&W', 400, '#e6c229',
+    '最经典的新闻纪实黑白片：颗粒粗犷、反差有力。',
+    { bw: [.30, .60, .10], contrast: .55, pivot: .42, grain: .55, gsize: 1.6, halation: .06 }),
+  film('aerochrome', 'Aerochrome III', 'AEROCHROME', 'KODAK', 'AEROCHROME III', 'slide', 'E-6', 400, '#c3307a',
+    '红外彩色航拍胶片：绿色植被会变成粉红与洋红。',
+    { ir: true, contrast: .3, sat: 1.2, grain: .35, gsize: 1.2 }),
+  film('hp5', 'HP5 Plus 400', 'HP5', 'ILFORD', 'HP5 PLUS', 'bw', 'B&W', 400, '#cfc8b8',
+    '宽容度极高的经典黑白片：影调柔和，颗粒自然。',
+    { bw: [.28, .62, .10], contrast: .25, black: .02, grain: .45, gsize: 1.4 }),
+  film('delta3200', 'Delta 3200', 'DELTA 3200', 'ILFORD', 'DELTA 3200', 'bw', 'B&W', 3200, '#b8332b',
+    '超高感黑白片：颗粒粗大、暗部浓郁，属于夜晚与氛围。',
+    { bw: [.30, .58, .12], contrast: .15, black: .04, grain: .85, gsize: 2.2 }),
+  film('cs800t', 'CineStill 800T', '800T', 'CINESTILL', '800T', 'neg', 'ECN-2', 800, '#c8283a',
+    '去掉防光晕层的灯光型电影胶片：画面偏冷，高光周围泛起红色光晕。',
+    { wb: [.88, .98, 1.12], contrast: .15, sat: 1.05, hsl: { r: [-6, .15, 0], y: [-12, -.05, 0], g: [14, -.1, -.04], c: [0, .1, 0], b: [-6, .1, 0] }, shadow: [-.012, .004, .016], high: [.01, .004, -.004], black: .035, grain: .45, gsize: 1.45, halation: .85, halColor: [1, .16, .06], halThresh: .5 }),
+  film('cs50d', 'CineStill 50D', '50D', 'CINESTILL', '50D', 'neg', 'ECN-2', 50, '#e4a53d',
+    '细腻的日光型电影胶片：干净、色彩自然，高光带一圈淡淡红晕。',
+    { contrast: .12, sat: 1.05, wb: [.99, 1, 1.02], black: .02, grain: .12, gsize: .8, halation: .5, halColor: [1, .2, .08], halThresh: .55 }),
+  film('vista', 'Vista 200', 'VISTA', 'AGFA', 'VISTA 200', 'neg', 'C-41', 200, '#c7333a',
+    '德系民用负片：红色饱满、色调明快。',
+    { contrast: .2, sat: 1.15, wb: [1.02, .99, .98], hsl: { r: [-4, .2, 0], g: [8, .05, -.04], b: [-6, .1, -.02] }, shadow: [-.004, 0, .01], black: .03, grain: .3, gsize: 1.2 }),
+  film('polaroid', 'Polaroid 600', 'POLAROID', 'POLAROID', '600', 'instant', 'INSTANT', 640, '#eee7da',
+    '宝丽来一次成像：低反差、奶油色高光与青绿色的阴影。',
+    { exp: .1, contrast: -.25, sat: .82, wb: [1.03, 1, .95], hsl: { r: [4, -.05, 0], g: [10, -.2, 0], b: [-10, -.15, .04] }, shadow: [-.01, .01, .02], high: [.03, .02, -.01], black: .07, white: .95, grain: .15, gsize: 1, vignette: .35, halation: .1 }),
+];
+const BRAND_CN = { FUJIFILM: '富士', KODAK: '柯达', ILFORD: '伊尔福', CINESTILL: 'CineStill', AGFA: '爱克发', POLAROID: '宝丽来' };
+const PROCESS_CN = { 'E-6': '反转片 E-6', 'K-14': '反转片 K-14', 'C-41': '彩色负片 C-41', 'ECN-2': '电影负片 ECN-2', 'B&W': '黑白负片', 'INSTANT': '一次成像' };
+const filmById = id => FILMS.find(f => f.id === id) || FILMS[1];
+const famOf = f => f.kind === 'bw' ? 'bw' : (f.kind === 'neg' ? 'neg' : 'pos');
+const mountName = f => f.brand === 'FUJIFILM' && f.kind === 'slide' ? 'FUJICHROME' : f.id === 'kodachrome' ? 'KODACHROME' : f.id === 'e100' ? 'EKTACHROME' : f.brand;
+
+/* ---------- darkroom constants ---------- */
+const NEUTRAL = { neg: { c: 0, m: 50, y: 60, time: 12 }, pos: { c: 0, m: 10, y: 20, time: 16 }, bw: { grade: 3, time: 12 } };
+const FAM_TEXT = {
+  neg: { proc: 'RA-4 彩色负片放大', hint: '加 Y 偏蓝 · 加 M 偏绿 · 加 C 偏红 · 时间越长越暗', cast: { y: ['偏蓝', '偏黄'], m: ['偏绿', '偏品'], c: ['偏红', '偏青'] } },
+  pos: { proc: 'Ilfochrome 正片直接放大', hint: '加 Y 偏黄 · 加 M 偏品 · 加 C 偏青 · 时间越长越亮', cast: { y: ['偏黄', '偏蓝'], m: ['偏品', '偏绿'], c: ['偏青', '偏红'] } },
+  bw: { proc: 'Multigrade 多级反差黑白相纸', hint: '等级越高反差越大 · 时间越长越暗' },
+};
+const PAPERS = [{ name: 'Endura 柔和', k: -0.15 }, { name: 'Crystal Archive', k: 0 }, { name: 'Ultra 高反差', k: 0.22 }];
+const SURFACES = [{ name: '光面', black: .012, white: [.985, .985, .98], tex: 0 }, { name: '珍珠面', black: .03, white: [.975, .973, .966], tex: .012 }, { name: '哑光', black: .06, white: [.962, .958, .95], tex: .022 }];
+const SURFACES_BW = [{ name: 'RC 光面', black: .012, white: [.985, .985, .98], tex: 0 }, { name: '纤维暖调', black: .02, white: [.975, .958, .925], tex: .008 }, { name: '哑光', black: .055, white: [.962, .958, .95], tex: .022 }];
+const GRADES = ['00', '0', '1', '2', '3', '4', '5'];
+const TONES = [
+  { name: '不调色', amt: 0, s: [0, 0, 0], m: [0, 0, 0], h: [0, 0, 0] },
+  { name: '硒调', amt: .6, s: [.10, .06, .09], m: [.50, .47, .48], h: [.97, .96, .95] },
+  { name: '棕调', amt: .9, s: [.16, .09, .05], m: [.62, .48, .34], h: [.98, .93, .84] },
+  { name: '金调', amt: .7, s: [.05, .07, .12], m: [.44, .48, .56], h: [.95, .96, .98] },
+  { name: '蓝晒', amt: 1, s: [.03, .12, .30], m: [.30, .50, .72], h: [.93, .96, .98] },
+];
+const FRAMES = [
+  { id: 'none', name: '无边框', aspect: null },
+  { id: '35mm', name: '35mm 底片', aspect: 1.5 },
+  { id: '120', name: '120 中画幅', aspect: 1 },
+  { id: 'slide', name: '幻灯片框', aspect: 1.5 },
+  { id: 'print', name: '暗房相纸', aspect: null },
+  { id: 'instant', name: '拍立得', aspect: 1 },
+];
+const ASPECTS = [{ id: 'orig', name: '原比例', v: null }, { id: '3:2', name: '3:2', v: 1.5 }, { id: '4:3', name: '4:3', v: 4 / 3 }, { id: '1:1', name: '1:1', v: 1 }, { id: '4:5', name: '4:5', v: 1.25 }, { id: '16:9', name: '16:9', v: 16 / 9 }];
+
+/* ---------- state ---------- */
+const STORE_KEY = 'filmlab.v1';
+const DEFAULT_STATE = { film: 'velvia100', ev: 0, fx: { grain: null, gsize: null, halation: null, vignette: null, bloom: 0, leak: 0, leakSeed: 7, dust: 0, date: false }, frame: 'none', aspect: 'orig', dark: { fam: 'pos', c: 0, m: 10, y: 20, time: 16, grade: 3, paper: 1, surface: 0, tone: 0 }, tab: 'film', sound: true, sample: 0 };
+let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+try { const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (saved && typeof saved === 'object') { state = Object.assign(state, saved); state.fx = Object.assign({}, DEFAULT_STATE.fx, saved.fx); state.dark = Object.assign({}, DEFAULT_STATE.dark, saved.dark); } } catch (e) { /* storage unavailable */ }
+let saveTimer = 0;
+const persist = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }, 300); };
+
+/* ---------- sound and haptics ---------- */
+const Sound = {
+  ac: null, noise: null,
+  unlock() {
+    if (!this.ac) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; try { this.ac = new AC(); } catch (e) { return; } }
+    if (this.ac.state === 'suspended') this.ac.resume().catch(() => {});
+  },
+  click(freq, dur, vol) {
+    const ac = this.ac; if (!state.sound || !ac || ac.state !== 'running') return;
+    if (!this.noise) { const b = ac.createBuffer(1, ac.sampleRate * 0.25, ac.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; this.noise = b; }
+    const t = ac.currentTime, src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = this.noise; bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 1.4;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(ac.destination); src.start(t, Math.random() * 0.2, dur + 0.02);
+  },
+  beep(freq, dur, vol) {
+    const ac = this.ac; if (!state.sound || !ac || ac.state !== 'running') return;
+    const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square'; o.frequency.value = freq; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.005); g.gain.setValueAtTime(vol, t + dur - 0.01); g.gain.linearRampToValueAtTime(0, t + dur);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+  },
+  detent() { this.click(3600, 0.016, 0.32); },
+  knob() { this.click(2600, 0.012, 0.18); },
+  shutter() { this.click(1500, 0.045, 0.7); setTimeout(() => this.click(2400, 0.03, 0.5), 75); },
+};
+let hapticLabel = null;
+const haptic = () => {
+  try {
+    if (navigator.vibrate) { navigator.vibrate(5); return; }
+    if (!hapticLabel) {
+      hapticLabel = document.createElement('label'); hapticLabel.setAttribute('aria-hidden', 'true'); hapticLabel.style.display = 'none';
+      const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+      hapticLabel.appendChild(inp); document.body.appendChild(hapticLabel);
+    }
+    hapticLabel.click();
+  } catch (e) { /* no haptics */ }
+};
+
+/* ---------- WebGL film engine ---------- */
+const VS = 'attribute vec2 aPos;varying vec2 vUv;void main(){vUv=aPos*0.5+0.5;gl_Position=vec4(aPos,0.0,1.0);}';
+const FS_BRIGHT = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uSrc;
+uniform vec4 uCrop;
+uniform vec2 uTexel;
+uniform float uThresh;
+vec3 tap(vec2 uv){ return pow(texture2D(uSrc, uv).rgb, vec3(2.2)); }
+void main(){
+  vec2 uv = uCrop.xy + vUv * uCrop.zw;
+  vec3 c = (tap(uv + vec2(-uTexel.x, -uTexel.y)) + tap(uv + vec2(uTexel.x, -uTexel.y)) + tap(uv + vec2(-uTexel.x, uTexel.y)) + tap(uv + uTexel)) * 0.25;
+  float l = max(c.r, max(c.g, c.b));
+  float k = smoothstep(uThresh, min(uThresh + 0.3, 1.0), l);
+  gl_FragColor = vec4(c * k, 1.0);
+}`;
+const FS_BLUR = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uTex;
+uniform vec2 uDir;
+void main(){
+  vec3 s = texture2D(uTex, vUv).rgb * 0.2270270270;
+  s += texture2D(uTex, vUv + uDir * 1.3846153846).rgb * 0.3162162162;
+  s += texture2D(uTex, vUv - uDir * 1.3846153846).rgb * 0.3162162162;
+  s += texture2D(uTex, vUv + uDir * 3.2307692308).rgb * 0.0702702703;
+  s += texture2D(uTex, vUv - uDir * 3.2307692308).rgb * 0.0702702703;
+  gl_FragColor = vec4(s, 1.0);
+}`;
+const FS_FINAL = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uSrc;
+uniform sampler2D uHal;
+uniform sampler2D uBloom;
+uniform sampler2D uLeak;
+uniform sampler2D uDust;
+uniform vec4 uCrop;
+uniform vec4 uRes;      // w, h, seed, bypass
+uniform vec4 uFilmA;    // exposure, contrast, pivot, saturation
+uniform vec4 uFilmB;    // black, white, isBW, halation
+uniform vec3 uWB;
+uniform mat3 uMat;
+uniform vec3 uSlope;
+uniform vec3 uOffset;
+uniform vec3 uPower;
+uniform vec3 uHsl[6];
+uniform vec3 uShadowTint;
+uniform vec3 uHighTint;
+uniform vec3 uBWMix;
+uniform vec3 uHalColor;
+uniform vec3 uPrintGain;
+uniform vec4 uPrint;    // paper contrast, paper texture, test strip on, strip sign
+uniform vec3 uPaperBlack;
+uniform vec3 uPaperWhite;
+uniform vec3 uToneS;
+uniform vec3 uToneM;
+uniform vec3 uToneH;
+uniform vec4 uFx;       // grain, grain size, grain colour, toning amount
+uniform vec4 uFx2;      // vignette, light leak, dust, dark dust
+uniform vec4 uFx3;      // bloom, infrared, halation threshold
+
+float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+vec3 sCurve(vec3 x, float k, float p){
+  x = clamp(x, 0.00001, 0.99999);
+  float e = 1.0 + k;
+  vec3 lo = p * pow(x / p, vec3(e));
+  vec3 hi = 1.0 - (1.0 - p) * pow(max((1.0 - x) / (1.0 - p), 0.00001), vec3(e));
+  return mix(lo, hi, step(vec3(p), x));
+}
+vec3 rgb2hsv(vec3 c){
+  vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  float e = 1.0e-10;
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+vec3 hsv2rgb(vec3 c){
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+vec3 bands(vec3 c){
+  vec3 hsv = rgb2hsv(clamp(c, 0.0, 1.0));
+  float h = hsv.x * 6.0;
+  float dh = 0.0; float ds = 0.0; float dv = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float d = abs(h - float(i));
+    d = min(d, 6.0 - d);
+    float w = max(0.0, 1.0 - d);
+    dh += w * uHsl[i].x; ds += w * uHsl[i].y; dv += w * uHsl[i].z;
+  }
+  float sw = smoothstep(0.02, 0.3, hsv.y);
+  float dss = ds * sw;
+  hsv.x = fract(hsv.x + dh * sw);
+  hsv.y = dss > 0.0 ? clamp(hsv.y + dss * hsv.y * (1.0 - hsv.y) * 2.0, 0.0, 1.0) : hsv.y * (1.0 + dss);
+  hsv.z = clamp(hsv.z * (1.0 + dv * sw), 0.0, 1.0);
+  return hsv2rgb(hsv);
+}
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float vnoise(vec2 p){
+  vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash12(i); float b = hash12(i + vec2(1.0, 0.0)); float c = hash12(i + vec2(0.0, 1.0)); float d = hash12(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float grainAt(vec2 p){ return (vnoise(p) + 0.6 * vnoise(p * 1.93 + 7.3) + 0.35 * vnoise(p * 3.71 + 2.1)) / 1.95; }
+
+void main(){
+  vec2 uv = uCrop.xy + vUv * uCrop.zw;
+  vec3 src = texture2D(uSrc, uv).rgb;
+  if (uRes.w > 0.5) { gl_FragColor = vec4(src, 1.0); return; }
+
+  // scene light hits the emulsion
+  vec3 lin0 = pow(src, vec3(2.2));
+  vec3 lin = lin0 * exp2(uFilmA.x);
+  vec3 hal = texture2D(uHal, vUv).rgb;
+  vec3 blm = texture2D(uBloom, vUv).rgb;
+  float lb = max(lin0.r, max(lin0.g, lin0.b));
+  float halo = max(max(hal.r, max(hal.g, hal.b)) - lb * smoothstep(uFx3.z, min(uFx3.z + 0.3, 1.0), lb), 0.0);
+  lin += uHalColor * halo * uFilmB.w * 2.4;
+  lin += blm * uFx3.x * 0.9;
+  lin = mix(lin, lin * 0.9 + 0.015, uFx3.x * 0.6);
+  lin *= uWB;
+  if (uFx3.y > 0.5) { float ir = max(lin.g * 1.15 - lin.b * 0.3, lin.r * 1.02); lin = vec3(ir, lin.r, lin.g); }
+  lin = max(uMat * lin, 0.0);
+
+  // film dye response
+  vec3 c = pow(lin, vec3(1.0 / 2.2));
+  c = pow(max(c * uSlope + uOffset, 0.0), uPower);
+  if (uFilmB.z > 0.5) c = vec3(dot(c, uBWMix));
+  c = sCurve(c, uFilmA.y, uFilmA.z);
+  if (uFilmB.z < 0.5) {
+    c = bands(c);
+    float y0 = luma(c);
+    float mx0 = max(c.r, max(c.g, c.b)); float mn0 = min(c.r, min(c.g, c.b));
+    float s0 = (mx0 - mn0) / max(mx0, 0.0001);
+    float sat = uFilmA.w > 1.0 ? 1.0 + (uFilmA.w - 1.0) * (1.0 - s0 * s0) : uFilmA.w;
+    c = mix(vec3(y0), c, sat);
+    float mx1 = max(c.r, max(c.g, c.b)); float mn1 = min(c.r, min(c.g, c.b));
+    if (mx1 > 1.0) c = mix(vec3(y0), c, (1.0 - y0) / max(mx1 - y0, 0.0001));
+    if (mn1 < 0.0) c = mix(vec3(y0), c, y0 / max(y0 - mn1, 0.0001));
+  }
+  float y1 = luma(c);
+  c += uShadowTint * (1.0 - smoothstep(0.0, 0.6, y1)) + uHighTint * smoothstep(0.4, 1.0, y1);
+  c = mix(vec3(uFilmB.x), vec3(uFilmB.y), clamp(c, 0.0, 1.0));
+
+  // enlarger and paper
+  float stops = 0.0;
+  if (uPrint.z > 0.5) stops = (floor(clamp(vUv.x, 0.0, 0.9999) * 5.0) - 2.0) * 0.5 * uPrint.w;
+  vec2 q = vUv - 0.5;
+  float vig = smoothstep(0.25, 1.15, length(q * 2.0) * 0.7071);
+  vec3 pl = pow(c, vec3(2.2)) * uPrintGain * exp2(-stops) * (1.0 - uFx2.x * vig * 0.85);
+  c = pow(pl, vec3(1.0 / 2.2));
+  c = sCurve(c, uPrint.x, 0.5);
+  if (uFx.w > 0.0) {
+    float t = luma(c);
+    vec3 g = mix(mix(uToneS, uToneM, clamp(t * 2.0, 0.0, 1.0)), uToneH, clamp(t * 2.0 - 1.0, 0.0, 1.0));
+    c = mix(c, g, uFx.w);
+  }
+  c = mix(uPaperBlack, uPaperWhite, c);
+
+  // light leak, dust and grain
+  vec3 lk = texture2D(uLeak, vUv).rgb * uFx2.y;
+  c = 1.0 - (1.0 - c) * (1.0 - lk);
+  float dust = texture2D(uDust, vUv).r * uFx2.z;
+  c = mix(c, mix(uPaperWhite, vec3(0.03), uFx2.w), dust);
+  vec2 px = vUv * uRes.xy;
+  float cellTrue = uFx.y * max(uRes.x, uRes.y) / 2400.0;
+  float cell = max(cellTrue, 0.75);
+  float att = mix(0.5, 1.0, smoothstep(0.3, 1.2, cellTrue));
+  vec2 gp = px / cell + uRes.z;
+  vec3 gn = vec3(grainAt(gp) - 0.5);
+  if (uFilmB.z < 0.5) gn += uFx.z * (vec3(grainAt(gp + 13.7), grainAt(gp + 41.3), grainAt(gp + 77.9)) - 0.5);
+  float y2 = luma(c);
+  c += gn * uFx.x * att * (0.1 + 3.6 * y2 * (1.0 - y2)) * 0.45;
+  c += (hash12(px * 0.73 + 3.1) - 0.5) * uPrint.y;
+  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+class Renderer {
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    const opts = { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: true };
+    const gl = this.canvas.getContext('webgl', opts) || this.canvas.getContext('experimental-webgl', opts);
+    if (!gl) throw new Error('WebGL unavailable');
+    this.gl = gl;
+    this.maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), 8192);
+    const buf = this.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    this.pBright = this.program(FS_BRIGHT); this.pBlur = this.program(FS_BLUR); this.pFinal = this.program(FS_FINAL);
+    this.src = this.texture(); this.leak = this.texture(); this.dust = this.texture();
+    this.fbos = [this.fbo(), this.fbo(), this.fbo()];
+    this.blurW = 0; this.blurH = 0; this.srcW = 1; this.srcH = 1;
+  }
+  program(fs) {
+    const gl = this.gl;
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    p.loc = {}; return p;
+  }
+  u(p, name) { if (!(name in p.loc)) p.loc[name] = this.gl.getUniformLocation(p, name); return p.loc[name]; }
+  texture() {
+    const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    return t;
+  }
+  fbo() { const gl = this.gl; return { tex: this.texture(), fb: gl.createFramebuffer() }; }
+  sizeFbo(f, w, h) {
+    const gl = this.gl; gl.bindTexture(gl.TEXTURE_2D, f.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f.fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, f.tex, 0);
+  }
+  upload(tex, source) {
+    const gl = this.gl; gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  }
+  setSource(source, w, h) { this.upload(this.src, source); this.srcW = w; this.srcH = h; }
+  bindQuad() { const gl = this.gl; gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); }
+  blur(from, to, dx, dy) {
+    const gl = this.gl, p = this.pBlur; gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, to.fb); gl.viewport(0, 0, this.blurW, this.blurH);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, from.tex); gl.uniform1i(this.u(p, 'uTex'), 0);
+    gl.uniform2f(this.u(p, 'uDir'), dx / this.blurW, dy / this.blurH);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  render(outW, outH, U) {
+    const gl = this.gl;
+    if (this.canvas.width !== outW || this.canvas.height !== outH) { this.canvas.width = outW; this.canvas.height = outH; }
+    const bw = outW >= outH ? 512 : Math.max(8, Math.round(512 * outW / outH));
+    const bh = outW >= outH ? Math.max(8, Math.round(512 * outH / outW)) : 512;
+    if (bw !== this.blurW || bh !== this.blurH) { this.blurW = bw; this.blurH = bh; this.fbos.forEach(f => this.sizeFbo(f, bw, bh)); }
+    const [A, B, C] = this.fbos;
+    this.bindQuad();
+    if (!U.bypass) {
+      let p = this.pBright; gl.useProgram(p);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, A.fb); gl.viewport(0, 0, bw, bh);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.src); gl.uniform1i(this.u(p, 'uSrc'), 0);
+      gl.uniform4fv(this.u(p, 'uCrop'), U.crop);
+      gl.uniform2f(this.u(p, 'uTexel'), Math.abs(U.crop[2]) / bw * 0.25, Math.abs(U.crop[3]) / bh * 0.25);
+      gl.uniform1f(this.u(p, 'uThresh'), U.halThresh);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      this.blur(A, B, 1.3, 0); this.blur(B, A, 0, 1.3);
+      this.blur(A, B, 1.6, 0); this.blur(B, A, 0, 1.6);
+      this.blur(A, B, 3.5, 0); this.blur(B, C, 0, 3.5);
+      this.blur(C, B, 6, 0); this.blur(B, C, 0, 6);
+    }
+    const p = this.pFinal; gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, outW, outH);
+    const units = [[this.src, 'uSrc'], [A.tex, 'uHal'], [C.tex, 'uBloom'], [this.leak, 'uLeak'], [this.dust, 'uDust']];
+    units.forEach(([t, n], i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(this.u(p, n), i); });
+    gl.uniform4fv(this.u(p, 'uCrop'), U.crop);
+    gl.uniform4f(this.u(p, 'uRes'), outW, outH, U.seed, U.bypass ? 1 : 0);
+    gl.uniform4fv(this.u(p, 'uFilmA'), U.filmA); gl.uniform4fv(this.u(p, 'uFilmB'), U.filmB);
+    ['uWB', 'uSlope', 'uOffset', 'uPower', 'uShadowTint', 'uHighTint', 'uBWMix', 'uHalColor', 'uPrintGain', 'uPaperBlack', 'uPaperWhite', 'uToneS', 'uToneM', 'uToneH'].forEach(n => gl.uniform3fv(this.u(p, n), U[n]));
+    gl.uniformMatrix3fv(this.u(p, 'uMat'), false, U.uMat);
+    gl.uniform3fv(this.u(p, 'uHsl'), U.uHsl);
+    gl.uniform4fv(this.u(p, 'uPrint'), U.print); gl.uniform4fv(this.u(p, 'uFx'), U.fx); gl.uniform4fv(this.u(p, 'uFx2'), U.fx2); gl.uniform4fv(this.u(p, 'uFx3'), U.fx3);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    return this.canvas;
+  }
+}
+
+/* procedural light-leak and dust plates */
+function leakPlate(seed) {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); const r = mulberry32(seed * 7919 + 13);
+  x.fillStyle = '#000'; x.fillRect(0, 0, 256, 256); x.globalCompositeOperation = 'lighter';
+  const side = Math.floor(r() * 4); const cols = ['255,80,20', '255,40,20', '255,170,60', '255,120,0', '255,215,130'];
+  for (let i = 0; i < 4; i++) {
+    const along = 256 * (0.1 + r() * 0.8), depth = 256 * (r() * 0.18 - 0.05);
+    const px = side === 0 ? depth : side === 1 ? 256 - depth : along, py = side === 2 ? depth : side === 3 ? 256 - depth : along;
+    const rad = 256 * (0.22 + r() * 0.45); const col = cols[Math.floor(r() * cols.length)];
+    const g = x.createRadialGradient(px, py, 0, px, py, rad); g.addColorStop(0, `rgba(${col},${0.75 + r() * 0.25})`); g.addColorStop(0.45, `rgba(${col},${0.25 + r() * 0.2})`); g.addColorStop(1, `rgba(${col},0)`);
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  }
+  const band = x.createLinearGradient(side < 2 ? 0 : 128, side < 2 ? 128 : 0, side < 2 ? 256 : 128, side < 2 ? 128 : 256);
+  const s0 = side % 2 === 0 ? 0 : 1; band.addColorStop(s0, 'rgba(255,90,30,.5)'); band.addColorStop(0.35, 'rgba(255,60,20,0)'); band.addColorStop(1 - s0, 'rgba(0,0,0,0)');
+  x.fillStyle = band; x.fillRect(0, 0, 256, 256);
+  return c;
+}
+function dustPlate() {
+  const c = document.createElement('canvas'); c.width = c.height = 1024; const x = c.getContext('2d'); const r = mulberry32(4242);
+  x.fillStyle = '#000'; x.fillRect(0, 0, 1024, 1024); x.fillStyle = '#fff'; x.strokeStyle = '#fff';
+  for (let i = 0; i < 220; i++) { x.globalAlpha = 0.4 + r() * 0.6; x.beginPath(); x.arc(r() * 1024, r() * 1024, 0.5 + r() * r() * 2.6, 0, TAU); x.fill(); }
+  for (let i = 0; i < 14; i++) {
+    x.globalAlpha = 0.55 + r() * 0.4; x.lineWidth = 0.7 + r() * 0.8; const sx = r() * 1024, sy = r() * 1024, l = 10 + r() * 40;
+    x.beginPath(); x.moveTo(sx, sy); x.bezierCurveTo(sx + (r() - 0.5) * l, sy + (r() - 0.5) * l, sx + (r() - 0.5) * l, sy + (r() - 0.5) * l, sx + (r() - 0.5) * l * 1.5, sy + (r() - 0.5) * l * 1.5); x.stroke();
+  }
+  for (let i = 0; i < 4; i++) { x.globalAlpha = 0.3 + r() * 0.3; x.lineWidth = 0.6; const sx = r() * 1024; x.beginPath(); x.moveTo(sx, 0); x.bezierCurveTo(sx + (r() - 0.5) * 30, 340, sx + (r() - 0.5) * 30, 680, sx + (r() - 0.5) * 20, 1024); x.stroke(); }
+  return c;
+}
+
+/* ---------- uniforms from state ---------- */
+const BAND_KEYS = ['r', 'y', 'g', 'c', 'b', 'm'];
+const IDENT = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+const colMajor = m => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+const fxVal = (st, f, k) => st.fx[k] == null ? f.p[k] : st.fx[k];
+function darkGain(st, f, timeMul = 1) {
+  const fam = famOf(f), n = NEUTRAL[fam], d = st.dark, K = 0.006;
+  const stops = Math.log2(d.time * timeMul / n.time);
+  if (fam === 'neg') return [10 ** ((d.c - n.c) * K), 10 ** ((d.m - n.m) * K), 10 ** ((d.y - n.y) * K)].map(g => g * 2 ** -stops);
+  if (fam === 'pos') return [10 ** (-(d.c - n.c) * K), 10 ** (-(d.m - n.m) * K), 10 ** (-(d.y - n.y) * K)].map(g => g * 2 ** stops);
+  return [1, 1, 1].map(g => g * 2 ** -stops);
+}
+function uniformsFor(st, opt) {
+  const f = filmById(st.film), p = f.p, fam = famOf(f), d = st.dark;
+  const surf = (fam === 'bw' ? SURFACES_BW : SURFACES)[d.surface] || SURFACES[0];
+  const tone = fam === 'bw' ? TONES[d.tone] || TONES[0] : TONES[0];
+  const paperK = fam === 'bw' ? (d.grade - 3) * 0.2 : (PAPERS[d.paper] || PAPERS[1]).k;
+  const hsl = []; BAND_KEYS.forEach(k => { const v = p.hsl[k] || [0, 0, 0]; hsl.push(v[0] / 360, v[1], v[2]); });
+  return {
+    crop: opt.crop, seed: opt.seed || 0, bypass: !!opt.bypass, halThresh: p.halThresh,
+    filmA: [p.exp + st.ev, clamp(p.contrast, -0.8, 2), p.pivot, p.sat],
+    filmB: [p.black, p.white, p.bw ? 1 : 0, fxVal(st, f, 'halation')],
+    uWB: p.wb, uSlope: p.slope, uOffset: p.offset, uPower: p.power, uShadowTint: p.shadow, uHighTint: p.high,
+    uBWMix: p.bw || [0, 0, 0], uHalColor: p.halColor, uMat: colMajor(p.mat || IDENT), uHsl: hsl,
+    uPrintGain: darkGain(st, f), print: [paperK, surf.tex, opt.strip ? 1 : 0, fam === 'pos' ? -1 : 1],
+    uPaperBlack: [surf.black, surf.black, surf.black], uPaperWhite: surf.white,
+    uToneS: tone.s, uToneM: tone.m, uToneH: tone.h,
+    fx: [fxVal(st, f, 'grain'), fxVal(st, f, 'gsize'), p.bw ? 0 : p.gcolor, tone.amt],
+    fx2: [fxVal(st, f, 'vignette'), st.fx.leak, st.fx.dust, fam === 'pos' ? 1 : 0],
+    fx3: [st.fx.bloom, p.ir ? 1 : 0, p.halThresh, 0],
+  };
+}
+
+/* ---------- framing ---------- */
+function cropFor(sw, sh, st = state) {
+  const fr = FRAMES.find(x => x.id === st.frame) || FRAMES[0];
+  const v = fr.aspect || (ASPECTS.find(a => a.id === st.aspect) || ASPECTS[0]).v;
+  const srcAr = sw / sh; let w = 1, h = 1;
+  if (v) { const ar = sw >= sh ? v : 1 / v; if (srcAr > ar) w = ar / srcAr; else h = srcAr / ar; }
+  return { x: (1 - w) / 2, y: (1 - h) / 2, w, h, pw: sw * w, ph: sh * h };
+}
+function layoutFrame(kind, iw, ih) {
+  if (kind === '35mm' || kind === '120') {
+    const rot = kind === '35mm' && ih > iw; const lw = rot ? ih : iw, lh = rot ? iw : ih;
+    const mm = kind === '35mm' ? lw / 36 : lw / 56;
+    const WL = Math.round((kind === '35mm' ? 42 : 64) * mm), HL = Math.round((kind === '35mm' ? 35 : 61) * mm);
+    const ixL = Math.round((WL - lw) / 2), iyL = Math.round((HL - lh) / 2);
+    if (!rot) return { kind, mm, rot, WL, HL, W: WL, H: HL, x: ixL, y: iyL, w: iw, h: ih, ixL, iyL, lw, lh };
+    return { kind, mm, rot, WL, HL, W: HL, H: WL, x: HL - iyL - lh, y: ixL, w: iw, h: ih, ixL, iyL, lw, lh };
+  }
+  if (kind === 'slide') { const mm = Math.max(iw, ih) / 34.5, S = Math.round(50 * mm); return { kind, mm, W: S, H: S, x: Math.round((S - iw) / 2), y: Math.round((S - ih) / 2), w: iw, h: ih }; }
+  if (kind === 'print') { const m = Math.round(Math.max(iw, ih) * 0.07), mb = Math.round(m * 1.55); return { kind, m, W: iw + 2 * m, H: ih + m + mb, x: m, y: m, w: iw, h: ih }; }
+  if (kind === 'instant') { const mm = iw / 79; return { kind, mm, W: Math.round(88 * mm), H: Math.round(107 * mm), x: Math.round(4.5 * mm), y: Math.round(6 * mm), w: iw, h: ih }; }
+  return { kind: 'none', W: iw, H: ih, x: 0, y: 0, w: iw, h: ih };
+}
+function roundRect(x, X, Y, W, H, r) { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + W, Y, X + W, Y + H, r); x.arcTo(X + W, Y + H, X, Y + H, r); x.arcTo(X, Y + H, X, Y, r); x.arcTo(X, Y, X + W, Y, r); x.closePath(); }
+const ENGRAVE = '"Saira Condensed","Arial Narrow",sans-serif';
+function drawFilmStrip(x, L, meta) {
+  const f = meta.film, mm = L.mm, W = L.WL, H = L.HL, is35 = L.kind === '35mm';
+  x.save();
+  if (L.rot) { x.translate(L.W, 0); x.rotate(Math.PI / 2); }
+  x.fillStyle = f.kind === 'bw' ? '#121212' : '#0d0b0a'; x.fillRect(0, 0, W, H);
+  const ink = f.kind === 'bw' ? 'rgba(222,218,210,.85)' : 'rgba(243,160,60,.92)';
+  if (is35) {
+    const pitch = 4.75 * mm, pw = 2.8 * mm, ph = 1.98 * mm, r = 0.5 * mm; x.fillStyle = '#efe9dc';
+    for (let px = L.ixL - 1.9 * mm - pitch * 3; px < W; px += pitch) {
+      if (px + pw < 0) continue;
+      roundRect(x, px, 2.0 * mm, pw, ph, r); x.fill(); roundRect(x, px, H - 2.0 * mm - ph, pw, ph, r); x.fill();
+    }
+    x.fillStyle = ink; x.textBaseline = 'middle'; x.font = `600 ${1.3 * mm}px ${ENGRAVE}`;
+    x.fillText(`${f.brand}  ${f.code}`, L.ixL + 2 * mm, 4.78 * mm);
+    x.fillText(`${f.code}`, L.ixL + 25 * mm, 4.78 * mm);
+    x.fillText(`${meta.frameNo}`, L.ixL + 7 * mm, H - 4.78 * mm);
+    x.fillText(`▸ ${meta.frameNo}A`, L.ixL + 27 * mm, H - 4.78 * mm);
+  } else {
+    x.fillStyle = ink; x.textBaseline = 'middle'; x.font = `600 ${1.5 * mm}px ${ENGRAVE}`;
+    x.fillText(`${f.brand}  ${f.name.toUpperCase()}`, L.ixL + 3 * mm, L.iyL / 2);
+    x.textAlign = 'right'; x.fillText(`◀ ${meta.frameNo}`, L.ixL + L.lw - 3 * mm, L.iyL / 2);
+    x.textAlign = 'left'; x.fillText(`${meta.frameNo}`, L.ixL + 20 * mm, H - L.iyL / 2);
+  }
+  x.restore();
+}
+function drawFilmStripFront(x, L) {
+  if (L.kind !== '120') return;
+  const mm = L.mm; x.fillStyle = '#0d0b0a';
+  x.beginPath(); x.moveTo(L.x, L.y + 9 * mm); x.lineTo(L.x + 1.4 * mm, L.y + 10 * mm); x.lineTo(L.x, L.y + 11 * mm); x.fill();
+  x.beginPath(); x.moveTo(L.x, L.y + 14 * mm); x.lineTo(L.x + 0.9 * mm, L.y + 14.6 * mm); x.lineTo(L.x, L.y + 15.2 * mm); x.fill();
+}
+function drawSlideMount(x, L, meta) {
+  const f = meta.film, mm = L.mm, S = L.W;
+  x.fillStyle = '#121110'; x.fillRect(0, 0, S, S);
+  const g = x.createLinearGradient(0, 0, S, S); g.addColorStop(0, '#f4f1ea'); g.addColorStop(1, '#dedad1');
+  roundRect(x, 0.5 * mm, 0.5 * mm, S - mm, S - mm, 3 * mm); x.fillStyle = g; x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.08)'; x.lineWidth = 0.25 * mm; roundRect(x, 1.8 * mm, 1.8 * mm, S - 3.6 * mm, S - 3.6 * mm, 2.2 * mm); x.stroke();
+  x.fillStyle = 'rgba(0,0,0,.22)'; x.fillRect(L.x - 0.5 * mm, L.y - 0.5 * mm, L.w + mm, L.h + mm);
+  const ink = f.brand === 'FUJIFILM' ? '#2d7a46' : f.brand === 'KODAK' ? '#b8392a' : '#3b3a36';
+  const topSpace = L.y, botY = L.y + L.h;
+  x.fillStyle = ink; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = `700 ${Math.min(3.2 * mm, topSpace * 0.42)}px ${ENGRAVE}`;
+  x.fillText(mountName(f), S / 2, topSpace * 0.42);
+  x.font = `600 ${Math.min(2 * mm, topSpace * 0.26)}px ${ENGRAVE}`; x.fillStyle = '#55524c';
+  x.fillText(f.name.toUpperCase(), S / 2, topSpace * 0.78);
+  const d = meta.date; const mon = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getMonth()];
+  x.font = `600 ${Math.min(2 * mm, (S - botY) * 0.26)}px ${ENGRAVE}`;
+  x.textAlign = 'left'; x.fillText(`${mon} ${d.getFullYear()}`, 4 * mm, botY + (S - botY) * 0.5);
+  x.textAlign = 'right'; x.fillText(`№ ${meta.frameNo}`, S - 4 * mm, botY + (S - botY) * 0.5);
+  x.textAlign = 'left';
+}
+function drawPrintPaper(x, L, meta) {
+  const surf = (famOf(meta.film) === 'bw' ? SURFACES_BW : SURFACES)[meta.dark.surface] || SURFACES[0];
+  const w = surf.white.map(v => Math.round(v * 255));
+  x.fillStyle = `rgb(${w[0]},${w[1]},${w[2]})`; x.fillRect(0, 0, L.W, L.H);
+  const b = Math.max(2, Math.round(Math.max(L.w, L.h) * 0.011)); const r = mulberry32(meta.seedInt + 99);
+  const pts = []; const step = Math.max(2, b * 0.7);
+  const edge = (x0, y0, x1, y1, nx, ny) => {
+    const len = Math.hypot(x1 - x0, y1 - y0), n = Math.max(2, Math.round(len / step));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n; let o = b * (0.75 + r() * 0.45); if (r() < 0.05) o += b * (0.6 + r());
+      if (t < 0.06 || t > 0.94) o += b * r() * 1.6;
+      pts.push([x0 + (x1 - x0) * t + nx * o, y0 + (y1 - y0) * t + ny * o]);
+    }
+  };
+  edge(L.x, L.y, L.x + L.w, L.y, 0, -1); edge(L.x + L.w, L.y, L.x + L.w, L.y + L.h, 1, 0);
+  edge(L.x + L.w, L.y + L.h, L.x, L.y + L.h, 0, 1); edge(L.x, L.y + L.h, L.x, L.y, -1, 0);
+  x.beginPath(); pts.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath();
+  x.fillStyle = '#0e0d0c'; x.fill();
+  const fs = Math.max(9, Math.round(L.m * 0.34)); x.font = `500 ${fs}px "Caveat","Bradley Hand",cursive`;
+  x.fillStyle = 'rgba(95,90,82,.85)'; x.textBaseline = 'middle';
+  const yy = L.y + L.h + (L.H - L.y - L.h) * 0.52;
+  x.textAlign = 'left'; x.fillText(`${meta.film.name}  ·  ${meta.darkNote}`, L.x, yy);
+  x.textAlign = 'right'; x.fillText(meta.dateText, L.x + L.w, yy); x.textAlign = 'left';
+}
+function drawInstant(x, L, meta) {
+  const g = x.createLinearGradient(0, 0, 0, L.H); g.addColorStop(0, '#f3f0e9'); g.addColorStop(1, '#e9e5dc');
+  x.fillStyle = g; x.fillRect(0, 0, L.W, L.H);
+  x.fillStyle = '#1a1816'; x.fillRect(L.x - 1, L.y - 1, L.w + 2, L.h + 2);
+  const fs = Math.max(10, Math.round(L.mm * 6)); x.font = `500 ${fs}px "Caveat","Bradley Hand",cursive`;
+  x.fillStyle = 'rgba(40,55,90,.85)'; x.textBaseline = 'middle'; x.textAlign = 'right';
+  x.fillText(`${meta.film.name} · ${meta.dateText}`, L.x + L.w - 2 * L.mm, L.y + L.h + (L.H - L.y - L.h) * 0.48); x.textAlign = 'left';
+}
+function drawInstantFront(x, L) {
+  const s = Math.max(2, L.mm * 1.2);
+  const g = x.createLinearGradient(0, L.y, 0, L.y + s); g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(L.x, L.y, L.w, s);
+}
+const SEG = { 0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' };
+function drawSevenSeg(x, text, ox, oy, h) {
+  const w = h * 0.52, t = h * 0.13, sk = h * 0.12; let cx = ox;
+  const P = (px, py) => [cx + px + sk * (1 - py / h), oy + py];
+  const segs = { a: [[t, 0], [w - t, 0]], b: [[w, t], [w, h / 2 - t / 2]], c: [[w, h / 2 + t / 2], [w, h - t]], d: [[t, h], [w - t, h]], e: [[0, h / 2 + t / 2], [0, h - t]], f: [[0, t], [0, h / 2 - t / 2]], g: [[t, h / 2], [w - t, h / 2]] };
+  x.lineWidth = t; x.lineCap = 'round';
+  for (const ch of text) {
+    if (ch === ' ') { cx += w * 0.9; continue; }
+    if (ch === "'") { const a = P(w * 0.2, 0), b = P(w * 0.1, h * 0.28); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); cx += w * 0.55; continue; }
+    for (const s of SEG[ch] || '') { const [p0, p1] = segs[s]; const a = P(p0[0], p0[1]), b = P(p1[0], p1[1]); x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); }
+    cx += w + h * 0.3;
+  }
+  return cx - ox;
+}
+function drawDateStamp(x, L, date) {
+  const h = Math.max(8, Math.min(L.w, L.h) * 0.042); const text = `'${pad2(date.getFullYear() % 100)} ${pad2(date.getMonth() + 1)} ${pad2(date.getDate())}`;
+  x.save(); x.globalAlpha = 0; const width = drawSevenSeg(x, text, 0, 0, h); x.restore();
+  const ox = L.x + L.w - width - L.w * 0.04, oy = L.y + L.h - h - L.h * 0.05;
+  x.save(); x.globalCompositeOperation = 'lighter';
+  x.shadowColor = 'rgba(255,110,30,.9)'; x.shadowBlur = h * 0.45; x.strokeStyle = 'rgba(255,120,40,.55)'; drawSevenSeg(x, text, ox, oy, h);
+  x.shadowBlur = 0; x.strokeStyle = 'rgba(255,190,110,.85)'; x.lineWidth = h * 0.08; drawSevenSeg(x, text, ox, oy, h);
+  x.restore();
+}
+function composite(x, L, img, meta, opt = {}) {
+  x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, L.W, L.H);
+  if (L.kind === '35mm' || L.kind === '120') drawFilmStrip(x, L, meta);
+  else if (L.kind === 'slide') drawSlideMount(x, L, meta);
+  else if (L.kind === 'print') drawPrintPaper(x, L, meta);
+  else if (L.kind === 'instant') drawInstant(x, L, meta);
+  x.drawImage(img, 0, 0, L.w, L.h, L.x, L.y, L.w, L.h);
+  if (L.kind === '120') drawFilmStripFront(x, L);
+  if (L.kind === 'instant') drawInstantFront(x, L);
+  if (meta.dateOn) drawDateStamp(x, L, meta.date);
+  if (opt.strip) drawStripLabels(x, L, meta);
+}
+function stripTimes(st) { const t = st.dark.time; return [-1, -0.5, 0, 0.5, 1].map(o => t * 2 ** o); }
+const fmtTime = t => (t < 10 ? t.toFixed(1) : String(Math.round(t))) + 's';
+function drawStripLabels(x, L) {
+  const times = stripTimes(state), bw = L.w / 5, fs = Math.max(10, Math.round(L.h * 0.05));
+  x.save(); x.font = `600 ${fs}px "Share Tech Mono",monospace`; x.textAlign = 'center'; x.textBaseline = 'top';
+  for (let i = 0; i < 5; i++) {
+    if (i) { x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(L.x + bw * i - 1, L.y, 2, L.h); }
+    const tx = L.x + bw * (i + 0.5), ty = L.y + fs * 0.6, label = fmtTime(times[i]);
+    const tw = x.measureText(label).width + fs * 0.8;
+    x.fillStyle = 'rgba(10,8,7,.75)'; x.fillRect(tx - tw / 2, ty - fs * 0.25, tw, fs * 1.5);
+    x.fillStyle = i === 2 ? '#f2a63b' : '#e8e1d4'; x.fillText(label, tx, ty);
+  }
+  x.restore();
+}
+function darkNote(st, f) {
+  const d = st.dark, fam = famOf(f);
+  if (fam === 'bw') return `Grade ${GRADES[d.grade]} · ${fmtTime(d.time)} · f/8`;
+  return `${d.c ? 'C' + d.c + ' ' : ''}M${d.m} Y${d.y} · ${fmtTime(d.time)} · f/8`;
+}
+function metaFor(st, still) {
+  const f = filmById(st.film), date = still ? still.date : new Date();
+  return {
+    film: f, dark: st.dark, date, dateOn: st.fx.date, frameNo: still ? still.frameNo : 24, seedInt: still ? still.seedInt : 1,
+    darkNote: darkNote(st, f), dateText: `${date.getFullYear()}.${pad2(date.getMonth() + 1)}.${pad2(date.getDate())}`,
+  };
+}
+
+/* ---------- app runtime ---------- */
+const view = $('#view'), vctx = view.getContext('2d'), vf = $('#viewfinder'), video = $('#video');
+let renderer = null;
+try { renderer = new Renderer(); } catch (e) { console.error(e); }
+const S = { mode: 'photo', still: null, stream: null, facing: 'environment', compare: false, strip: false, dirty: true, busy: false, layout: null, liveSeed: 0 };
+const requestRender = () => { S.dirty = true; };
+
+function toast(msg, action, ms = 2600) {
+  const t = $('#toast'); t.textContent = '';
+  const span = document.createElement('span'); span.textContent = msg; t.appendChild(span);
+  if (action) { const b = document.createElement('button'); b.textContent = action.label; b.onclick = () => { t.hidden = true; action.run(); }; t.appendChild(b); }
+  t.hidden = false; clearTimeout(toast.tm); toast.tm = setTimeout(() => { t.hidden = true; }, action ? 6000 : ms);
+}
+
+function makeStill(source, w, h, info) {
+  const maxFull = Math.min(4096, renderer ? renderer.maxTex : 4096);
+  let s = Math.min(1, maxFull / Math.max(w, h)); if (w * h * s * s > 16e6) s = Math.sqrt(16e6 / (w * h));
+  const full = document.createElement('canvas'); full.width = Math.max(1, Math.round(w * s)); full.height = Math.max(1, Math.round(h * s));
+  const fx = full.getContext('2d'); fx.imageSmoothingQuality = 'high'; fx.drawImage(source, 0, 0, full.width, full.height);
+  const ps = Math.min(1, 1600 / Math.max(full.width, full.height));
+  let preview = full;
+  if (ps < 1) { preview = document.createElement('canvas'); preview.width = Math.round(full.width * ps); preview.height = Math.round(full.height * ps); const px = preview.getContext('2d'); px.imageSmoothingQuality = 'high'; px.drawImage(full, 0, 0, preview.width, preview.height); }
+  const seedInt = Math.floor(Math.random() * 1e6);
+  return Object.assign({ full, preview, w: full.width, h: full.height, date: new Date(), frameNo: 1 + (seedInt % 36), seedInt, seed: (seedInt % 997) + 0.37 }, info);
+}
+function useStill(still) {
+  S.still = still; S.mode = 'photo';
+  if (renderer) renderer.setSource(still.preview, still.preview.width, still.preview.height);
+  const thumb = $('#libThumb');
+  if (still.kind === 'sample') { thumb.style.backgroundImage = ''; thumb.firstElementChild && (thumb.firstElementChild.style.display = ''); }
+  else { try { const t = document.createElement('canvas'); t.width = 96; t.height = 96; const s = Math.max(96 / still.preview.width, 96 / still.preview.height); t.getContext('2d').drawImage(still.preview, (96 - still.preview.width * s) / 2, (96 - still.preview.height * s) / 2, still.preview.width * s, still.preview.height * s); thumb.style.backgroundImage = `url(${t.toDataURL('image/jpeg', 0.8)})`; if (thumb.firstElementChild) thumb.firstElementChild.style.display = 'none'; } catch (e) { /* ignore */ } }
+  updateSourceUi(); requestRender();
+}
+function loadImageFromUrl(url) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('图片无法读取')); im.src = url; });
+}
+const SAMPLES = (window.FILMLAB_SAMPLES || []);
+async function loadSample(i) {
+  if (!SAMPLES.length) { useStill(makeStill(testChart(), 1200, 800, { kind: 'sample', name: '色卡' })); return; }
+  const smp = SAMPLES[((i % SAMPLES.length) + SAMPLES.length) % SAMPLES.length];
+  try { const im = await loadImageFromUrl(smp.src); useStill(makeStill(im, im.naturalWidth, im.naturalHeight, { kind: 'sample', name: smp.name, credit: smp.credit })); }
+  catch (e) { useStill(makeStill(testChart(), 1200, 800, { kind: 'sample', name: '色卡' })); }
+}
+function testChart() {
+  const c = document.createElement('canvas'); c.width = 1200; c.height = 800; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 800); g.addColorStop(0, '#3b6fb5'); g.addColorStop(0.55, '#bcd6ea'); g.addColorStop(0.56, '#5f8f3a'); g.addColorStop(1, '#2f4f1f');
+  x.fillStyle = g; x.fillRect(0, 0, 1200, 800);
+  const sw = ['#735244', '#c29682', '#627a9d', '#576c43', '#8580b1', '#67bdaa', '#d67e2c', '#505ba6', '#c15a63', '#5e3c6c', '#9dbc40', '#e0a32e', '#383d96', '#469449', '#af363c', '#e7c71f', '#bb5695', '#0885a1', '#f3f3f2', '#c8c8c8', '#a0a0a0', '#7a7a7a', '#555555', '#343434'];
+  sw.forEach((col, i) => { x.fillStyle = col; x.fillRect(150 + (i % 6) * 152, 140 + Math.floor(i / 6) * 132, 140, 120); });
+  return c;
+}
+async function loadFile(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  try { const im = await loadImageFromUrl(url); useStill(makeStill(im, im.naturalWidth, im.naturalHeight, { kind: 'photo', name: file.name })); toast('照片已装片，转动转盘挑胶片'); }
+  catch (e) { toast('这张图片打不开，换一张试试'); }
+  finally { setTimeout(() => URL.revokeObjectURL(url), 2000); }
+}
+
+/* camera */
+async function startCamera() {
+  if (framed || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('#camIn').click(); return; }
+  try {
+    stopCamera();
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: S.facing, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+    S.stream = stream; video.srcObject = stream; video.muted = true; video.setAttribute('playsinline', ''); await video.play();
+    S.mode = 'live'; updateSourceUi(); requestRender();
+  } catch (e) {
+    S.mode = 'photo'; updateSourceUi();
+    toast('没能打开实时取景，可以改用系统相机拍照', { label: '用系统相机', run: () => $('#camIn').click() });
+  }
+}
+function stopCamera() {
+  if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+  video.srcObject = null;
+  if (S.mode === 'live') { S.mode = 'photo'; if (S.still && renderer) renderer.setSource(S.still.preview, S.still.preview.width, S.still.preview.height); }
+  updateSourceUi(); requestRender();
+}
+function captureFrame() {
+  const w = video.videoWidth, h = video.videoHeight; if (!w || !h) return null;
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  if (S.facing === 'user') { x.translate(w, 0); x.scale(-1, 1); }
+  x.drawImage(video, 0, 0, w, h);
+  return c;
+}
+function updateSourceUi() {
+  const live = S.mode === 'live', sample = !live && S.still && S.still.kind === 'sample';
+  $('#shutter').classList.toggle('live', live);
+  $('#shutterLabel').textContent = live ? '拍 摄' : '冲 印';
+  $('#shutter').setAttribute('aria-label', live ? '拍摄' : '冲印这张照片');
+  $('#camLabel').textContent = live ? '关闭' : '相机';
+  $('#flipBtn').hidden = !live; $('#liveTag').hidden = !live;
+  $('#nextSample').hidden = !sample;
+  $('#srcBadge').textContent = live ? '实时取景' : sample ? `样张 · ${S.still.name}` : '你的照片';
+  $('#vfHint').textContent = S.strip ? '点一档试条选定曝光时间' : '按住画面查看原图';
+}
+
+/* preview rendering */
+function sourceInfo() {
+  if (S.mode === 'live') { const w = video.videoWidth, h = video.videoHeight; return w && h ? { w, h, mirror: S.facing === 'user' } : null; }
+  return S.still ? { w: S.still.w, h: S.still.h, mirror: false } : null;
+}
+function cropUniform(crop, mirror) { return mirror ? [crop.x + crop.w, crop.y, -crop.w, crop.h] : [crop.x, crop.y, crop.w, crop.h]; }
+function renderPreview() {
+  if (!renderer) return;
+  const src = sourceInfo(); if (!src) return;
+  const crop = cropFor(src.w, src.h);
+  const r = vf.getBoundingClientRect(); const dpr = Math.min(window.devicePixelRatio || 1, S.mode === 'live' ? 2 : 3);
+  const bw = Math.max(60, r.width - 24) * dpr, bh = Math.max(60, r.height - 24) * dpr;
+  const ar = crop.pw / crop.ph;
+  const u = layoutFrame(state.frame, ar >= 1 ? 1000 : Math.round(1000 * ar), ar >= 1 ? Math.round(1000 / ar) : 1000);
+  const s = Math.min(bw / u.W, bh / u.H);
+  const iw = Math.max(16, Math.round(u.w * s)), ih = Math.max(16, Math.round(u.h * s));
+  const L = layoutFrame(state.frame, iw, ih);
+  const seed = S.mode === 'live' ? (S.liveSeed = (S.liveSeed + 17.3) % 1000) : S.still.seed;
+  const out = renderer.render(iw, ih, uniformsFor(state, { crop: cropUniform(crop, src.mirror), seed, bypass: S.compare, strip: S.strip && !S.compare }));
+  if (view.width !== L.W || view.height !== L.H) { view.width = L.W; view.height = L.H; }
+  view.style.width = (L.W / dpr) + 'px'; view.style.height = (L.H / dpr) + 'px';
+  composite(vctx, L, out, metaFor(state, S.mode === 'live' ? null : S.still), { strip: S.strip && !S.compare });
+  S.layout = { L, dpr };
+}
+function loop() {
+  requestAnimationFrame(loop);
+  if (S.mode === 'live') { if (video.readyState >= 2 && renderer) { renderer.setSource(video, video.videoWidth, video.videoHeight); renderPreview(); } return; }
+  if (S.dirty) { S.dirty = false; renderPreview(); }
+}
+
+/* export */
+const fontsReady = document.fonts && document.fonts.load
+  ? Promise.all(['500 20px "Caveat"', '600 20px "Saira Condensed"', '700 20px "Saira Condensed"', '20px "Share Tech Mono"'].map(f => document.fonts.load(f))).catch(() => {})
+  : Promise.resolve();
+async function renderExport() {
+  await Promise.race([fontsReady, new Promise(r => setTimeout(r, 2500))]);
+  const still = S.still, crop = cropFor(still.w, still.h);
+  let iw = Math.round(crop.pw), ih = Math.round(crop.ph);
+  let L = layoutFrame(state.frame, iw, ih);
+  const lim = Math.min(renderer.maxTex, 6000); let sc = Math.min(1, lim / Math.max(L.W, L.H)); if (L.W * L.H * sc * sc > 16.5e6) sc = Math.sqrt(16.5e6 / (L.W * L.H));
+  if (sc < 1) { iw = Math.round(iw * sc); ih = Math.round(ih * sc); L = layoutFrame(state.frame, iw, ih); }
+  renderer.setSource(still.full, still.w, still.h);
+  const out = renderer.render(iw, ih, uniformsFor(state, { crop: cropUniform(crop, false), seed: still.seed }));
+  const c = document.createElement('canvas'); c.width = L.W; c.height = L.H;
+  composite(c.getContext('2d'), L, out, metaFor(state, still));
+  renderer.setSource(still.preview, still.preview.width, still.preview.height); requestRender();
+  const blob = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('编码失败')), 'image/jpeg', 0.92));
+  return { blob, w: L.W, h: L.H };
+}
+const fileName = () => { const f = filmById(state.film), d = new Date(); return `FilmLab_${f.name.replace(/[^A-Za-z0-9]+/g, '')}_${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}.jpg`; };
+
+/* develop sequence */
+const dev = $('#dev'), devPrint = $('#devPrint'), devImg = $('#devImg');
+let devTimers = [], devClockRaf = 0, devDone = false, lastShot = null;
+function clockRun(from, to, ms, fmt) {
+  cancelAnimationFrame(devClockRaf); const t0 = performance.now();
+  const step = now => { const k = Math.min(1, (now - t0) / ms); $('#devClock').textContent = fmt(from + (to - from) * k); if (k < 1) devClockRaf = requestAnimationFrame(step); };
+  devClockRaf = requestAnimationFrame(step);
+}
+const mmss = s => `${pad2(Math.floor(s / 60))}:${pad2(Math.floor(s % 60))}`;
+function finishDevelop() {
+  devTimers.forEach(clearTimeout); devTimers = []; cancelAnimationFrame(devClockRaf);
+  dev.classList.remove('safe', 'expose'); devPrint.classList.remove('emerge'); devPrint.classList.add('done');
+  $('#devStep').textContent = '水洗完成'; $('#devClock').textContent = '01:30';
+  $('#devActions').classList.add('show'); $('#devTip').textContent = '长按照片也能直接存到相册'; devDone = true;
+  $('#saveBtn').focus({ preventScroll: true });
+}
+async function develop() {
+  if (S.busy || !renderer) return;
+  if (S.mode === 'live') {
+    const c = captureFrame(); if (!c) return;
+    Sound.shutter(); haptic(); const fl = $('#flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
+    const st = makeStill(c, c.width, c.height, { kind: 'photo', name: 'camera' }); stopCamera(); useStill(st);
+  } else { Sound.click(900, 0.05, 0.5); }
+  S.busy = true; devDone = false;
+  devPrint.classList.remove('emerge', 'done'); devImg.removeAttribute('src');
+  $('#devActions').classList.remove('show'); $('#devTip').textContent = '轻点任意处跳过显影动画';
+  const f = filmById(state.film); const t = state.dark.time;
+  $('#devStep').textContent = '曝光中'; $('#devClock').textContent = fmtTime(t);
+  $('#devMeta').textContent = '';
+  dev.hidden = false; dev.classList.add('safe', 'expose');
+  await new Promise(r => setTimeout(r, 60));
+  let res;
+  try { res = await renderExport(); } catch (e) { console.error(e); dev.hidden = true; dev.classList.remove('safe', 'expose'); S.busy = false; toast('冲印失败，请再试一次'); return; }
+  if (lastShot) URL.revokeObjectURL(lastShot.url);
+  lastShot = { blob: res.blob, url: URL.createObjectURL(res.blob), name: fileName() };
+  devImg.src = lastShot.url; try { await devImg.decode(); } catch (e) { /* fine */ }
+  $('#devMeta').textContent = `${f.name} · ${PROCESS_CN[f.process]} · ${res.w}×${res.h}`;
+  S.busy = false;
+  if (reduceMotion) { finishDevelop(); return; }
+  clockRun(t, 0, 700, v => v.toFixed(1) + 's');
+  devTimers.push(setTimeout(() => { Sound.beep(1760, 0.09, 0.08); dev.classList.remove('expose'); $('#devStep').textContent = '显影'; devPrint.classList.add('emerge'); clockRun(0, 90, 2600, mmss); }, 750));
+  devTimers.push(setTimeout(() => { $('#devStep').textContent = '停显'; }, 3500));
+  devTimers.push(setTimeout(() => { $('#devStep').textContent = '定影'; }, 3900));
+  devTimers.push(setTimeout(() => { Sound.beep(1320, 0.07, 0.06); $('#devStep').textContent = '开灯'; dev.classList.remove('safe'); }, 4500));
+  devTimers.push(setTimeout(finishDevelop, 5500));
+}
+let downloadsCap = null;
+if (window.claude && typeof window.claude.use === 'function') { window.claude.use('downloads').then(d => { downloadsCap = d; }).catch(() => {}); }
+async function savePhoto() {
+  if (!lastShot) return;
+  if (downloadsCap) {
+    try { await downloadsCap.save({ filename: lastShot.name, data: lastShot.blob }); toast('已保存'); return; }
+    catch (e) { if (e && e.code === 'declined') return; if (e && e.code === 'rate_limited') { toast('稍等一下再保存'); return; } }
+  }
+  const file = new File([lastShot.blob], lastShot.name, { type: 'image/jpeg' });
+  if (!framed && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = lastShot.url; a.download = lastShot.name; document.body.appendChild(a); a.click(); a.remove();
+  toast('如果没有开始下载，请长按照片存到相册', null, 4000);
+}
+
+/* ---------- dial ---------- */
+const BRAND_GROUPS = (() => { const g = []; FILMS.forEach((f, i) => { const last = g[g.length - 1]; if (last && last.brand === f.brand) last.end = i; else g.push({ brand: f.brand, start: i, end: i }); }); return g; })();
+class Dial {
+  constructor(cv, onPick) {
+    this.cv = cv; this.ctx = cv.getContext('2d'); this.onPick = onPick; this.n = FILMS.length; this.step = TAU / this.n;
+    this.angle = 0; this.idx = 0; this.vel = 0; this.raf = 0; this.drag = null; this.w = 300; this.h = 132; this.dpr = 1;
+    cv.addEventListener('pointerdown', e => this.down(e));
+    cv.addEventListener('pointermove', e => this.move(e));
+    cv.addEventListener('pointerup', e => this.up(e));
+    cv.addEventListener('pointercancel', e => this.up(e));
+    cv.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); this.goTo(this.idx + 1); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); this.goTo(this.idx - 1); }
+    });
+  }
+  geom() { const R = Math.max(this.w * 0.9, 300); return { R, cx: this.w / 2, cy: 30 + R }; }
+  resize() {
+    const r = this.cv.getBoundingClientRect(); if (!r.width) return;
+    this.dpr = Math.min(3, window.devicePixelRatio || 1); this.w = r.width; this.h = r.height;
+    this.cv.width = Math.round(r.width * this.dpr); this.cv.height = Math.round(r.height * this.dpr); this.draw();
+  }
+  setIndex(i) { this.idx = ((i % this.n) + this.n) % this.n; this.angle = -this.idx * this.step; this.draw(); }
+  angleAt(e) { const r = this.cv.getBoundingClientRect(), g = this.geom(); return Math.atan2(e.clientX - r.left - g.cx, g.cy - (e.clientY - r.top)); }
+  sync(fromUser) {
+    const i = ((Math.round(-this.angle / this.step) % this.n) + this.n) % this.n;
+    if (i !== this.idx) { this.idx = i; Sound.detent(); if (fromUser) haptic(); this.onPick(FILMS[i]); }
+    this.draw();
+  }
+  down(e) {
+    Sound.unlock(); cancelAnimationFrame(this.raf); this.cv.setPointerCapture(e.pointerId);
+    this.drag = { x0: e.clientX, y0: e.clientY, last: this.angleAt(e), t: performance.now(), moved: false }; this.vel = 0;
+  }
+  move(e) {
+    const d = this.drag; if (!d) return;
+    const a = this.angleAt(e), da = wrapPi(a - d.last), now = performance.now(), dt = Math.max(1, now - d.t);
+    d.last = a; d.t = now; if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 5) d.moved = true;
+    this.angle += da * 1.15; this.vel = this.vel * 0.6 + (da * 1.15 / dt) * 0.4; this.sync(true);
+  }
+  up(e) {
+    const d = this.drag; if (!d) return; this.drag = null;
+    if (!d.moved) { const a = this.angleAt(e); const i = Math.round((a - this.angle) / this.step); this.goTo(i); return; }
+    if (performance.now() - d.t > 80) this.vel = 0;
+    this.coast();
+  }
+  coast() {
+    let t = performance.now();
+    const tick = now => {
+      const dt = Math.min(40, now - t); t = now;
+      if (Math.abs(this.vel) > 0.0004) { this.angle += this.vel * dt; this.vel *= Math.pow(0.94, dt / 16); this.sync(false); this.raf = requestAnimationFrame(tick); }
+      else this.snap();
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+  snap() { this.animateTo(-Math.round(-this.angle / this.step) * this.step); }
+  goTo(i) { const target = this.angle - wrapPi(i * this.step + this.angle); this.animateTo(target); }
+  animateTo(target) {
+    cancelAnimationFrame(this.raf); const a0 = this.angle, t0 = performance.now(), dur = reduceMotion ? 1 : Math.min(520, 160 + Math.abs(target - a0) * 900);
+    const tick = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); this.angle = a0 + (target - a0) * e; this.sync(false); if (k < 1) this.raf = requestAnimationFrame(tick); };
+    this.raf = requestAnimationFrame(tick);
+  }
+  draw() {
+    const x = this.ctx, { R, cx, cy } = this.geom(), w = this.w, h = this.h;
+    x.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); x.clearRect(0, 0, w, h);
+    const vis = Math.asin(Math.min(1, (w / 2 + 24) / R));
+    x.save(); x.beginPath(); x.arc(cx, cy, R, 0, TAU);
+    const body = x.createLinearGradient(0, cy - R, 0, cy - R + 150); body.addColorStop(0, '#2d2925'); body.addColorStop(1, '#121010');
+    x.fillStyle = body; x.shadowColor = 'rgba(0,0,0,.7)'; x.shadowBlur = 16; x.fill(); x.restore();
+    const K = 320, ks = TAU / K; x.lineWidth = 1.1;
+    for (let k = 0; k < K; k++) {
+      const a = wrapPi(k * ks + this.angle); if (Math.abs(a) > vis) continue;
+      const s = Math.sin(a), c = Math.cos(a), light = 0.5 + 0.5 * Math.cos(a * 2.2 + 0.7);
+      x.strokeStyle = k % 2 ? `rgba(225,216,202,${0.16 + light * 0.3})` : 'rgba(0,0,0,.6)';
+      x.beginPath(); x.moveTo(cx + s * (R - 1.5), cy - c * (R - 1.5)); x.lineTo(cx + s * (R - 12), cy - c * (R - 12)); x.stroke();
+    }
+    x.beginPath(); x.arc(cx, cy, R - 13, 0, TAU); x.fillStyle = '#1a1714'; x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.09)'; x.lineWidth = 1; x.stroke();
+    for (let r = R - 17, j = 0; r > R - 110; r -= 2.5, j++) { x.beginPath(); x.arc(cx, cy, r, -Math.PI / 2 - vis, -Math.PI / 2 + vis); x.strokeStyle = `rgba(255,255,255,${0.008 + (j * 7 % 5) * 0.004})`; x.stroke(); }
+    const rl = R - 33; x.textAlign = 'center'; x.textBaseline = 'middle';
+    for (let i = 0; i < this.n; i++) {
+      const a = wrapPi(i * this.step + this.angle); if (Math.abs(a) > vis) continue;
+      const f = FILMS[i], sel = i === this.idx, fade = 1 - Math.pow(Math.min(1, Math.abs(a) / vis), 2);
+      x.save(); x.translate(cx + Math.sin(a) * rl, cy - Math.cos(a) * rl); x.rotate(a);
+      x.font = `${sel ? 700 : 600} ${sel ? 15 : 13}px ${ENGRAVE}`;
+      x.fillStyle = sel ? '#f2a63b' : `rgba(228,221,208,${0.3 + 0.62 * fade})`; x.fillText(f.dial, 0, 0);
+      x.globalAlpha = sel ? 1 : 0.3 + 0.55 * fade; x.fillStyle = f.color; x.beginPath(); x.arc(0, 13, 2.3, 0, TAU); x.fill();
+      x.restore();
+      const a2 = a + this.step / 2; x.fillStyle = 'rgba(228,221,208,.35)'; x.beginPath(); x.arc(cx + Math.sin(a2) * (R - 20), cy - Math.cos(a2) * (R - 20), 1.1, 0, TAU); x.fill();
+    }
+    const rb = R - 66; x.font = `600 9.5px ${ENGRAVE}`;
+    BRAND_GROUPS.forEach(g => {
+      const mid = wrapPi(((g.start + g.end) / 2) * this.step + this.angle);
+      if (Math.abs(mid) < vis) { x.save(); x.translate(cx + Math.sin(mid) * rb, cy - Math.cos(mid) * rb); x.rotate(mid); x.fillStyle = 'rgba(152,143,130,.9)'; x.fillText(g.brand.split('').join(' '), 0, 0); x.restore(); }
+      const edge = wrapPi((g.start - 0.5) * this.step + this.angle);
+      if (Math.abs(edge) < vis) { x.strokeStyle = 'rgba(152,143,130,.5)'; x.lineWidth = 1; x.beginPath(); x.moveTo(cx + Math.sin(edge) * (rb - 9), cy - Math.cos(edge) * (rb - 9)); x.lineTo(cx + Math.sin(edge) * (rb + 9), cy - Math.cos(edge) * (rb + 9)); x.stroke(); }
+    });
+    x.fillStyle = '#f2a63b'; x.beginPath(); x.moveTo(cx - 6.5, 7); x.lineTo(cx + 6.5, 7); x.lineTo(cx, 17); x.closePath(); x.fill();
+    x.fillRect(cx - 0.75, 17, 1.5, 13);
+    x.font = `600 9px ${ENGRAVE}`; x.fillStyle = 'rgba(152,143,130,.8)'; x.textAlign = 'left'; x.fillText('FILM SIMULATION', 12, 12);
+    x.textAlign = 'right'; x.fillText(`${pad2(this.idx + 1)} / ${this.n}`, w - 12, 12);
+    const fw = Math.min(56, w * 0.14);
+    let g = x.createLinearGradient(0, 0, fw, 0); g.addColorStop(0, 'rgba(24,21,19,1)'); g.addColorStop(1, 'rgba(24,21,19,0)'); x.fillStyle = g; x.fillRect(0, 18, fw, h);
+    g = x.createLinearGradient(w, 0, w - fw, 0); g.addColorStop(0, 'rgba(24,21,19,1)'); g.addColorStop(1, 'rgba(24,21,19,0)'); x.fillStyle = g; x.fillRect(w - fw, 18, fw, h);
+    this.cv.setAttribute('aria-valuenow', String(this.idx + 1)); this.cv.setAttribute('aria-valuetext', FILMS[this.idx].name);
+  }
+}
+
+/* ---------- knob ---------- */
+class Knob {
+  constructor(host, o) {
+    this.o = o; this.v = o.value;
+    host.className = 'knob';
+    host.innerHTML = `<div class="k-label">${o.label}<small>${o.sub || ''}</small></div><canvas class="k-cv" tabindex="0" role="slider"></canvas><div class="k-val led"></div>`;
+    this.cv = host.querySelector('canvas'); this.out = host.querySelector('.k-val'); this.ctx = this.cv.getContext('2d');
+    this.cv.setAttribute('aria-label', `${o.label} ${o.sub || ''}`.trim());
+    const dpr = Math.min(3, window.devicePixelRatio || 1); this.cv.width = this.cv.height = Math.round(52 * dpr); this.dpr = dpr * 52 / 58;
+    let drag = null, lastTap = 0;
+    this.cv.addEventListener('pointerdown', e => { Sound.unlock(); this.cv.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, t: this.toT(this.v), moved: false }; });
+    this.cv.addEventListener('pointermove', e => {
+      if (!drag) return; const d = (e.clientX - drag.x) - (e.clientY - drag.y);
+      if (Math.abs(d) > 3) drag.moved = true;
+      this.set(this.fromT(clamp(drag.t + d / 200, 0, 1)), true);
+    });
+    const end = () => {
+      if (!drag) return; const moved = drag.moved; drag = null;
+      if (!moved) { const now = performance.now(); if (now - lastTap < 320) { this.set(this.o.neutral, true); haptic(); } lastTap = now; }
+    };
+    this.cv.addEventListener('pointerup', end); this.cv.addEventListener('pointercancel', end);
+    this.cv.addEventListener('keydown', e => {
+      const st = this.o.keyStep || 1;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); this.set(this.o.log ? this.v * 1.06 : this.v + st, true); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); this.set(this.o.log ? this.v / 1.06 : this.v - st, true); }
+    });
+    this.draw();
+  }
+  toT(v) { const o = this.o; return o.log ? Math.log(v / o.min) / Math.log(o.max / o.min) : (v - o.min) / (o.max - o.min); }
+  fromT(t) { const o = this.o; return o.log ? o.min * Math.pow(o.max / o.min, t) : o.min + (o.max - o.min) * t; }
+  snapV(v) { const o = this.o; v = clamp(v, o.min, o.max); if (o.log) return v < 10 ? Math.round(v * 10) / 10 : Math.round(v); return Math.round(v / (o.step || 1)) * (o.step || 1); }
+  set(v, user) {
+    v = this.snapV(v); if (v === this.v) return;
+    const prev = this.v; this.v = v; this.draw();
+    if (user) { const q = this.o.tickEvery || 1; if (Math.floor(prev / q) !== Math.floor(v / q) || this.o.log) Sound.knob(); this.o.onInput(v); }
+  }
+  draw() {
+    const x = this.ctx, o = this.o, s = 58, c = s / 2;
+    x.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); x.clearRect(0, 0, s, s);
+    const A0 = -Math.PI * 0.75, A1 = Math.PI * 0.75, ang = t => A0 + (A1 - A0) * t;
+    for (let i = 0; i <= 20; i++) { const a = ang(i / 20), r0 = i % 5 ? 26 : 24.5; x.strokeStyle = i % 5 ? 'rgba(152,143,130,.45)' : 'rgba(221,215,204,.75)'; x.lineWidth = 1; x.beginPath(); x.moveTo(c + Math.sin(a) * r0, c - Math.cos(a) * r0); x.lineTo(c + Math.sin(a) * 28, c - Math.cos(a) * 28); x.stroke(); }
+    const tn = this.toT(o.neutral), tv = this.toT(this.v);
+    x.strokeStyle = o.color; x.lineWidth = 2.4; x.beginPath(); x.arc(c, c, 22.2, Math.min(ang(tn), ang(tv)) - Math.PI / 2, Math.max(ang(tn), ang(tv)) - Math.PI / 2 + 0.001); x.stroke();
+    x.save(); x.shadowColor = 'rgba(0,0,0,.7)'; x.shadowBlur = 5; x.shadowOffsetY = 2;
+    const g = x.createRadialGradient(c - 5, c - 6, 2, c, c, 19); g.addColorStop(0, '#5a544d'); g.addColorStop(1, '#1b1815');
+    x.fillStyle = g; x.beginPath(); x.arc(c, c, 19, 0, TAU); x.fill(); x.restore();
+    for (let i = 0; i < 24; i++) { const a = i / 24 * TAU + ang(tv); x.strokeStyle = 'rgba(0,0,0,.45)'; x.beginPath(); x.moveTo(c + Math.sin(a) * 16.5, c - Math.cos(a) * 16.5); x.lineTo(c + Math.sin(a) * 19, c - Math.cos(a) * 19); x.stroke(); }
+    const cap = x.createRadialGradient(c - 3, c - 4, 1, c, c, 13); cap.addColorStop(0, '#6a645c'); cap.addColorStop(1, '#2a2622');
+    x.fillStyle = cap; x.beginPath(); x.arc(c, c, 13.5, 0, TAU); x.fill();
+    x.fillStyle = o.color; x.beginPath(); x.arc(c, c, 3, 0, TAU); x.fill();
+    const a = ang(tv); x.strokeStyle = '#f3eee5'; x.lineWidth = 2.2; x.lineCap = 'round'; x.beginPath(); x.moveTo(c + Math.sin(a) * 7, c - Math.cos(a) * 7); x.lineTo(c + Math.sin(a) * 17, c - Math.cos(a) * 17); x.stroke();
+    this.out.textContent = o.fmt(this.v);
+    this.cv.setAttribute('aria-valuenow', String(this.v)); this.cv.setAttribute('aria-valuetext', o.fmt(this.v));
+  }
+}
+
+/* ---------- panels ---------- */
+let dial = null;
+function setFilm(f, fromDial) {
+  const prevFam = famOf(filmById(state.film)), fam = famOf(f);
+  state.film = f.id; state.fx.grain = state.fx.gsize = state.fx.halation = state.fx.vignette = null;
+  if (prevFam !== fam || state.dark.fam !== fam) { Object.assign(state.dark, NEUTRAL[fam], { fam }); if (fam === 'bw') state.dark.surface = 1; }
+  if (!fromDial && dial) dial.setIndex(FILMS.indexOf(f));
+  updateFilmUi(); if (prevFam !== fam || !knobs.time) buildDarkroom(); syncFx(); persist(); requestRender();
+}
+function updateFilmUi() {
+  const f = filmById(state.film);
+  document.documentElement.style.setProperty('--film', f.color);
+  $('#chipName').textContent = f.name.toUpperCase(); $('#chipMeta').textContent = `${f.process} · ${f.iso}`;
+  $('#fiName').textContent = f.name;
+  $('#fiTags').textContent = `${BRAND_CN[f.brand]} · ${PROCESS_CN[f.process]} · ISO ${f.iso}`;
+  $('#fiDesc').textContent = f.desc;
+}
+let knobs = {};
+function buildDarkroom() {
+  const f = filmById(state.film), fam = famOf(f), d = state.dark, txt = FAM_TEXT[fam], n = NEUTRAL[fam];
+  $('#dkProc').textContent = txt.proc; $('#dkHint').textContent = txt.hint;
+  const host = $('#knobs'); host.innerHTML = ''; knobs = {};
+  const add = (key, o) => { const el = document.createElement('div'); host.appendChild(el); knobs[key] = new Knob(el, Object.assign({ value: d[key], neutral: n[key], onInput: v => { state.dark[key] = v; persist(); requestRender(); } }, o)); };
+  if (fam === 'bw') {
+    add('grade', { label: 'GRADE', sub: '反差', color: '#cfc8b8', min: 0, max: 6, step: 1, fmt: v => GRADES[v] });
+  } else {
+    add('c', { label: 'C', sub: '青', color: '#2fb8c9', min: 0, max: 150, step: 1, tickEvery: 5, keyStep: 5, fmt: v => String(v) });
+    add('m', { label: 'M', sub: '品', color: '#d0368a', min: 0, max: 150, step: 1, tickEvery: 5, keyStep: 5, fmt: v => String(v) });
+    add('y', { label: 'Y', sub: '黄', color: '#e8c21f', min: 0, max: 150, step: 1, tickEvery: 5, keyStep: 5, fmt: v => String(v) });
+  }
+  add('time', { label: 'TIME', sub: '曝光', color: '#f2a63b', min: 2, max: 64, log: true, fmt: fmtTime });
+  const row = $('#paperRow'), acts = $('#dkActions'); row.innerHTML = ''; acts.innerHTML = '';
+  const chips = (label, items, key) => {
+    const l = document.createElement('span'); l.className = 'pane-label'; l.textContent = label; row.appendChild(l);
+    const group = [];
+    items.forEach((it, i) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = it.name; b.setAttribute('aria-pressed', String(state.dark[key] === i)); b.onclick = () => { state.dark[key] = i; group.forEach((c, j) => c.setAttribute('aria-pressed', String(j === i))); Sound.knob(); persist(); requestRender(); }; group.push(b); row.appendChild(b); });
+  };
+  if (fam === 'bw') chips('调色', TONES, 'tone'); else chips('相纸', PAPERS, 'paper');
+  const div = document.createElement('span'); div.className = 'divider'; row.appendChild(div);
+  chips('表面', fam === 'bw' ? SURFACES_BW : SURFACES, 'surface');
+  const strip = document.createElement('button'); strip.className = 'pill'; strip.id = 'stripBtn'; strip.textContent = '试条'; strip.setAttribute('aria-pressed', String(S.strip));
+  strip.onclick = () => { setStrip(!S.strip); }; acts.appendChild(strip);
+  if (fam !== 'bw') { const ring = document.createElement('button'); ring.className = 'pill'; ring.textContent = '色环'; ring.onclick = openRing; acts.appendChild(ring); }
+}
+function setStrip(on) { S.strip = on; const b = $('#stripBtn'); if (b) b.setAttribute('aria-pressed', String(on)); updateSourceUi(); requestRender(); if (on) toast('画面分成五档曝光时间，点最满意的一档'); }
+
+const FX_DEFS = [
+  { key: 'ev', label: '曝光补偿', min: -2, max: 2, step: 0.1, fmt: v => (v > 0 ? '+' : '') + v.toFixed(1) + ' EV' },
+  { key: 'grain', label: '颗粒', min: 0, max: 1, step: 0.01, film: true, fmt: v => Math.round(v * 100) },
+  { key: 'gsize', label: '颗粒大小', min: 0.5, max: 3, step: 0.05, film: true, fmt: v => v.toFixed(2) },
+  { key: 'halation', label: '红色光晕', min: 0, max: 1, step: 0.01, film: true, fmt: v => Math.round(v * 100) },
+  { key: 'bloom', label: '柔焦 (Pro-Mist)', min: 0, max: 1, step: 0.01, fmt: v => Math.round(v * 100) },
+  { key: 'vignette', label: '暗角', min: 0, max: 1, step: 0.01, film: true, fmt: v => Math.round(v * 100) },
+  { key: 'leak', label: '漏光', min: 0, max: 1, step: 0.01, fmt: v => Math.round(v * 100) },
+  { key: 'dust', label: '灰尘划痕', min: 0, max: 1, step: 0.01, fmt: v => Math.round(v * 100) },
+];
+const fxInputs = {};
+function buildFx() {
+  const grid = $('#fxGrid');
+  FX_DEFS.forEach(d => {
+    const lab = document.createElement('label'); lab.className = 'fx';
+    lab.innerHTML = `<span class="fx-top"><span>${d.label}</span><output></output></span><input type="range" id="fx-${d.key}" min="${d.min}" max="${d.max}" step="${d.step}">`;
+    const inp = lab.querySelector('input'), out = lab.querySelector('output');
+    inp.addEventListener('input', () => {
+      const v = parseFloat(inp.value);
+      if (d.key === 'ev') state.ev = v; else state.fx[d.key] = v;
+      paint(); persist(); requestRender();
+    });
+    const paint = () => { const v = parseFloat(inp.value); out.textContent = d.fmt(v); inp.style.setProperty('--p', ((v - d.min) / (d.max - d.min) * 100) + '%'); };
+    fxInputs[d.key] = { inp, paint, d }; grid.appendChild(lab);
+  });
+  const now = new Date(); $('#dateSample').textContent = `'${pad2(now.getFullYear() % 100)} ${pad2(now.getMonth() + 1)} ${pad2(now.getDate())}`;
+  $('#dateToggle').onclick = () => { state.fx.date = !state.fx.date; Sound.knob(); syncFx(); persist(); requestRender(); };
+  $('#leakShuffle').onclick = () => { state.fx.leakSeed = (state.fx.leakSeed + 1) % 9973; if (!state.fx.leak) state.fx.leak = 0.6; renderer && renderer.upload(renderer.leak, leakPlate(state.fx.leakSeed)); syncFx(); persist(); requestRender(); };
+  $('#fxReset').onclick = () => { state.ev = 0; Object.assign(state.fx, { grain: null, gsize: null, halation: null, vignette: null, bloom: 0, leak: 0, dust: 0 }); syncFx(); persist(); requestRender(); };
+}
+function syncFx() {
+  const f = filmById(state.film);
+  Object.values(fxInputs).forEach(({ inp, paint, d }) => { inp.value = d.key === 'ev' ? state.ev : fxVal(state, f, d.key); paint(); });
+  $('#dateToggle').setAttribute('aria-pressed', String(!!state.fx.date));
+}
+const FRAME_ICONS = {
+  none: '<rect x="7" y="5" width="40" height="24" rx="1.5" fill="#6d665c"/>',
+  '35mm': '<rect x="2" y="3" width="50" height="28" fill="#0d0b0a" stroke="#4a443d"/><rect x="9" y="9" width="36" height="16" fill="#6d665c"/>' + [4, 10, 16, 22, 28, 34, 40, 46].map(v => `<rect x="${v}" y="4.5" width="2.6" height="2" rx=".5" fill="#d8d1c3"/><rect x="${v}" y="27.5" width="2.6" height="2" rx=".5" fill="#d8d1c3"/>`).join(''),
+  '120': '<rect x="8" y="2" width="38" height="30" fill="#0d0b0a" stroke="#4a443d"/><rect x="13" y="5" width="28" height="24" fill="#6d665c"/><path d="M13 11l2 1.5-2 1.5z" fill="#0d0b0a"/>',
+  slide: '<rect x="11" y="1" width="32" height="32" rx="3" fill="#e7e3da"/><rect x="16" y="10" width="22" height="14" fill="#6d665c"/>',
+  print: '<rect x="6" y="2" width="42" height="30" fill="#efebe3"/><rect x="10" y="5" width="34" height="20" fill="#121110"/><rect x="11" y="6" width="32" height="18" fill="#6d665c"/>',
+  instant: '<rect x="14" y="1" width="26" height="32" fill="#efebe3"/><rect x="16.5" y="3.5" width="21" height="21" fill="#6d665c"/>',
+};
+function buildFrames() {
+  const host = $('#frames');
+  FRAMES.forEach(fr => {
+    const b = document.createElement('button'); b.className = 'frame-card'; b.dataset.id = fr.id;
+    b.innerHTML = `<svg viewBox="0 0 54 34" aria-hidden="true">${FRAME_ICONS[fr.id]}</svg>${fr.name}`;
+    b.onclick = () => { state.frame = fr.id; Sound.knob(); syncFrames(); persist(); requestRender(); };
+    host.appendChild(b);
+  });
+  const row = $('#aspectRow'); const l = document.createElement('span'); l.className = 'pane-label'; l.id = 'aspectLabel'; row.appendChild(l);
+  ASPECTS.forEach(a => { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = a.id; b.textContent = a.name; b.onclick = () => { state.aspect = a.id; Sound.knob(); syncFrames(); persist(); requestRender(); }; row.appendChild(b); });
+}
+function syncFrames() {
+  const fr = FRAMES.find(x => x.id === state.frame) || FRAMES[0];
+  document.querySelectorAll('.frame-card').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === state.frame)));
+  document.querySelectorAll('#aspectRow .chip').forEach(b => { b.setAttribute('aria-pressed', String(!fr.aspect && b.dataset.id === state.aspect)); b.disabled = !!fr.aspect; });
+  $('#aspectLabel').textContent = fr.aspect ? `画幅 · 固定 ${fr.aspect === 1 ? '1:1' : '3:2'}` : '画幅';
+}
+
+/* ring-around */
+function openRing() {
+  if (!renderer || !S.still || S.mode === 'live') { toast('色环需要一张静态照片，先拍一张或从相册选'); return; }
+  const f = filmById(state.film), fam = famOf(f), cast = FAM_TEXT[fam].cast, grid = $('#ringGrid');
+  const brighter = fam === 'pos' ? 1.41 : 1 / 1.41, darker = 1 / brighter;
+  const V = [
+    { l: `Y+15 ${cast.y[0]}`, d: { y: 15 } }, { l: `M+15 ${cast.m[0]}`, d: { m: 15 } }, { l: `C+15 ${cast.c[0]}`, d: { c: 15 } },
+    { l: '曝光 更亮', t: brighter }, { l: '当前', d: {}, cur: true }, { l: '曝光 更暗', t: darker },
+    { l: `Y−15 ${cast.y[1]}`, d: { y: -15 } }, { l: `M−15 ${cast.m[1]}`, d: { m: -15 } }, { l: `C−15 ${cast.c[1]}`, d: { c: -15 } },
+  ];
+  grid.innerHTML = '';
+  const crop = cropFor(S.still.w, S.still.h), ar = crop.pw / crop.ph, tw = ar >= 1 ? 300 : Math.round(300 * ar), th = ar >= 1 ? Math.round(300 / ar) : 300;
+  V.forEach(v => {
+    const st = JSON.parse(JSON.stringify(state));
+    if (v.d) Object.keys(v.d).forEach(k => { st.dark[k] = clamp(st.dark[k] + v.d[k], 0, 150); });
+    if (v.t) st.dark.time = clamp(Math.round(st.dark.time * v.t * 10) / 10, 2, 64);
+    const out = renderer.render(tw, th, uniformsFor(st, { crop: cropUniform(crop, false), seed: S.still.seed }));
+    const b = document.createElement('button'); b.className = 'ring-tile' + (v.cur ? ' cur' : '');
+    const c = document.createElement('canvas'); c.width = tw; c.height = th; c.getContext('2d').drawImage(out, 0, 0);
+    const s = document.createElement('span'); s.textContent = v.l; b.append(c, s);
+    b.onclick = () => { Object.assign(state.dark, st.dark); buildDarkroom(); persist(); closeSheet($('#ring')); requestRender(); if (!v.cur) toast(`已套用：${v.l}`); };
+    grid.appendChild(b);
+  });
+  requestRender(); openSheet($('#ring'));
+}
+let sheetReturn = null;
+function openSheet(el) { sheetReturn = document.activeElement; el.hidden = false; const btn = el.querySelector('[data-close]'); if (btn) btn.focus({ preventScroll: true }); }
+function closeSheet(el) { el.hidden = true; if (sheetReturn && sheetReturn.focus) sheetReturn.focus({ preventScroll: true }); }
+document.querySelectorAll('.overlay [data-close]').forEach(b => b.addEventListener('click', () => closeSheet(b.closest('.overlay'))));
+document.querySelectorAll('#ring, #help').forEach(o => o.addEventListener('click', e => { if (e.target === o) closeSheet(o); }));
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  ['#ring', '#help'].forEach(s => { const o = $(s); if (!o.hidden) closeSheet(o); });
+  if (!dev.hidden && devDone) closeDev();
+});
+
+/* tabs */
+const TABS = ['film', 'dark', 'fx', 'frame'];
+function setTab(t) {
+  state.tab = t; persist();
+  TABS.forEach(k => { $('#tab-' + k).setAttribute('aria-selected', String(k === t)); $('#pane-' + k).hidden = k !== t; });
+  if (t === 'film' && dial) requestAnimationFrame(() => dial.resize());
+  if (t !== 'dark' && S.strip) setStrip(false);
+}
+TABS.forEach(k => $('#tab-' + k).addEventListener('click', () => { Sound.unlock(); setTab(k); }));
+$('.tabs').addEventListener('keydown', e => { const i = TABS.indexOf(state.tab); if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const n = TABS[(i + (e.key === 'ArrowRight' ? 1 : 3)) % 4]; setTab(n); $('#tab-' + n).focus(); } });
+
+/* viewfinder interactions */
+view.addEventListener('pointerdown', e => {
+  Sound.unlock();
+  if (S.strip && S.layout) {
+    const r = view.getBoundingClientRect(), L = S.layout.L, sx = (e.clientX - r.left) / r.width * L.W;
+    const b = clamp(Math.floor((sx - L.x) / (L.w / 5)), 0, 4); const t = stripTimes(state)[b];
+    state.dark.time = clamp(t < 10 ? Math.round(t * 10) / 10 : Math.round(t), 2, 64); persist(); setStrip(false); buildDarkroom();
+    toast(`曝光时间定为 ${fmtTime(state.dark.time)}`); haptic(); return;
+  }
+  view.setPointerCapture(e.pointerId); S.compare = true; requestRender();
+});
+const endCompare = () => { if (S.compare) { S.compare = false; requestRender(); } };
+view.addEventListener('pointerup', endCompare); view.addEventListener('pointercancel', endCompare);
+view.addEventListener('contextmenu', e => e.preventDefault());
+
+/* buttons */
+$('#filmChip').onclick = () => setTab('film');
+$('#soundBtn').onclick = () => { state.sound = !state.sound; $('#soundBtn').setAttribute('aria-pressed', String(state.sound)); persist(); if (state.sound) { Sound.unlock(); setTimeout(() => Sound.detent(), 30); } };
+$('#helpBtn').onclick = () => openSheet($('#help'));
+$('#nextSample').onclick = () => { state.sample = (state.sample + 1) % Math.max(1, SAMPLES.length); persist(); loadSample(state.sample); };
+$('#libBtn').onclick = () => { Sound.unlock(); $('#fileIn').click(); };
+$('#fileIn').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (S.mode === 'live') stopCamera(); loadFile(f); e.target.value = ''; });
+$('#camIn').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; loadFile(f).then(() => { if (f && S.still && S.still.kind === 'photo') develop(); }); e.target.value = ''; });
+$('#camBtn').onclick = () => { Sound.unlock(); if (S.mode === 'live') stopCamera(); else startCamera(); };
+$('#flipBtn').onclick = () => { S.facing = S.facing === 'user' ? 'environment' : 'user'; startCamera(); };
+$('#shutter').onclick = () => { Sound.unlock(); develop(); };
+function closeDev() { devTimers.forEach(clearTimeout); devTimers = []; cancelAnimationFrame(devClockRaf); dev.hidden = true; dev.classList.remove('safe', 'expose'); $('#shutter').focus({ preventScroll: true }); }
+dev.addEventListener('click', e => { if (!devDone && !S.busy && devImg.getAttribute('src')) { finishDevelop(); return; } if (devDone && e.target === dev) closeDev(); });
+$('#closeDev').onclick = e => { e.stopPropagation(); closeDev(); };
+$('#saveBtn').onclick = e => { e.stopPropagation(); savePhoto(); };
+if (!framed && navigator.share) {
+  $('#shareBtn').hidden = false;
+  $('#shareBtn').onclick = async e => { e.stopPropagation(); if (!lastShot) return; const file = new File([lastShot.blob], lastShot.name, { type: 'image/jpeg' }); try { if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'FilmLab' }); else await navigator.share({ title: 'FilmLab', text: filmById(state.film).name }); } catch (err) { /* cancelled */ } };
+}
+document.addEventListener('pointerdown', () => Sound.unlock(), { once: true, capture: true });
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.mode === 'live') stopCamera(); });
+
+/* ---------- boot ---------- */
+if (!renderer) {
+  $('#viewfinder').innerHTML = '<p style="padding:24px;text-align:center;color:#c3bbaf;max-width:32ch">这台设备的浏览器没有开启 WebGL，FilmLab 无法显影。请用最新版 Safari 或 Chrome 打开。</p>';
+} else {
+  renderer.upload(renderer.leak, leakPlate(state.fx.leakSeed));
+  renderer.upload(renderer.dust, dustPlate());
+}
+if (!FILMS.some(f => f.id === state.film)) state.film = DEFAULT_STATE.film;
+$('#soundBtn').setAttribute('aria-pressed', String(state.sound));
+dial = new Dial($('#dial'), f => setFilm(f, true));
+dial.setIndex(FILMS.indexOf(filmById(state.film)));
+{ const fam = famOf(filmById(state.film)); if (state.dark.fam !== fam) Object.assign(state.dark, NEUTRAL[fam], { fam }); }
+updateFilmUi(); buildDarkroom(); buildFx(); syncFx(); buildFrames(); syncFrames(); setTab(TABS.includes(state.tab) ? state.tab : 'film');
+const ro = new ResizeObserver(() => { dial.resize(); requestRender(); }); ro.observe(vf); ro.observe($('#dial'));
+fontsReady.then(() => { dial.draw(); requestRender(); });
+loadSample(state.sample || 0);
+requestAnimationFrame(loop);
+if (!framed && 'serviceWorker' in navigator && location.protocol === 'https:') { navigator.serviceWorker.register('sw.js').catch(() => {}); }
+window.__filmlab = { state, FILMS, setFilm, renderPreview: () => renderPreview(), S, renderExport };
+})();
+</script>
