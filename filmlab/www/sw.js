@@ -1,5 +1,5 @@
 // FilmLab service worker: app shell cache-first, Google Fonts cached at runtime.
-const CACHE = 'filmlab-d6f95268dc';
+const CACHE = 'filmlab-21aea4c2c9';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

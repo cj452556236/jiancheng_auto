@@ -333,16 +333,16 @@ const film = (id, name, dial, brand, code, kind, process, iso, color, desc, p) =
 const FILMS = [
   film('velvia50', 'Velvia 50', 'VELVIA 50', 'FUJIFILM', 'RVP 50', 'slide', 'E-6', 50, '#2f7a52',
     '风光摄影的传奇反转片：极高饱和、反差厚重，绿叶浓郁、天空深邃。',
-    { exp: -0.15, wb: [1.03, 1, 0.96], contrast: 0.55, pivot: 0.42, sat: 1.38, hsl: { r: [-4, .15, -.06], y: [-6, .12, 0], g: [4, .35, -.1], c: [0, .2, -.06], b: [8, .25, -.15], m: [0, .2, 0] }, shadow: [.012, -.006, .016], grain: .12, gsize: .8, halation: .05 }),
+    { exp: -0.15, wb: [1.03, 1, 0.96], contrast: 0.55, pivot: 0.42, sat: 1.38, hsl: { r: [-4, .15, -.06], y: [-6, .12, 0], g: [4, .35, -.1], c: [0, .2, -.06], b: [3, .25, -.15], m: [0, .2, 0] }, shadow: [.006, -.003, .006], grain: .07, gsize: .8, halation: .05 }),
   film('velvia100', 'Velvia 100', 'VELVIA 100', 'FUJIFILM', 'RVP100', 'slide', 'E-6', 100, '#7b3f98',
     '更鲜艳利落的 Velvia：红色带一点品红，蓝天更纯，颗粒细腻，风光与花卉的首选。',
-    { exp: -0.1, wb: [1, 0.99, 1.01], offset: [.004, -.006, .004], contrast: 0.48, pivot: 0.43, sat: 1.36, hsl: { r: [-7, .2, -.05], y: [-3, .1, 0], g: [3, .3, -.07], c: [-2, .2, -.05], b: [5, .25, -.12], m: [0, .15, 0] }, shadow: [.008, -.004, .014], grain: .11, gsize: .8, halation: .05 }),
+    { exp: -0.1, wb: [1, 0.995, 1.005], offset: [.002, -.002, 0], contrast: 0.48, pivot: 0.43, sat: 1.38, hsl: { r: [-7, .2, -.05], y: [-3, .1, 0], g: [3, .3, -.07], c: [-2, .2, -.05], b: [1, .25, -.12], m: [0, .15, 0] }, shadow: [.002, -.002, .006], grain: .07, gsize: .8, halation: .05 }),
   film('provia', 'Provia 100F', 'PROVIA', 'FUJIFILM', 'RDP III', 'slide', 'E-6', 100, '#2b65b0',
     '标准中性的专业反转片：色彩准确、反差适中，什么都能拍。',
-    { wb: [0.99, 1, 1.02], contrast: 0.25, sat: 1.12, hsl: { g: [0, .06, 0], b: [-2, .08, -.04] }, black: .008, grain: .11, gsize: .8 }),
+    { wb: [0.99, 1, 1.02], contrast: 0.25, sat: 1.12, hsl: { g: [0, .06, 0], b: [-2, .08, -.04] }, black: .008, grain: .08, gsize: .8 }),
   film('astia', 'Astia 100F', 'ASTIA', 'FUJIFILM', 'RAP F', 'slide', 'E-6', 100, '#c8607f',
     '柔和反差的人像反转片：肤色细腻，高光过渡温柔。',
-    { wb: [1.01, 1, 0.99], contrast: 0.08, sat: 1.04, hsl: { r: [2, -.05, .03], y: [0, -.05, .03], b: [0, .1, -.03] }, high: [.006, .003, -.002], black: .015, grain: .1, gsize: .8 }),
+    { wb: [1.01, 1, 0.99], contrast: 0.08, sat: 1.04, hsl: { r: [2, -.05, .03], y: [0, -.05, .03], b: [0, .1, -.03] }, high: [.006, .003, -.002], black: .015, grain: .07, gsize: .8 }),
   film('pro400h', 'Pro 400H', 'PRO 400H', 'FUJIFILM', 'PRO 400H', 'neg', 'C-41', 400, '#6fae8c',
     '清新通透的婚礼胶片：粉彩色调，绿色偏薄荷青，阴影透着青蓝。',
     { exp: .15, wb: [.98, 1.01, 1.02], contrast: -0.12, sat: .88, hsl: { r: [0, -.05, .03], y: [6, -.1, .04], g: [12, -.1, .06], b: [-6, -.05, .04] }, shadow: [-.01, .008, .012], high: [.01, .005, -.005], black: .04, white: .97, grain: .3, gsize: 1.2 }),
@@ -390,7 +390,7 @@ const FILMS = [
     { contrast: .45, pivot: .42, sat: 1.18, wb: [1.03, 1, .96], hsl: { r: [-6, .25, -.1], y: [-8, .12, 0], g: [-8, -.05, -.06], c: [0, 0, -.04], b: [-2, .15, -.14] }, shadow: [.006, 0, -.004], grain: .16, gsize: .9 }),
   film('e100', 'Ektachrome E100', 'E100', 'KODAK', 'E100', 'slide', 'E-6', 100, '#3478c6',
     '干净通透的现代反转片：色彩准确，略微偏冷。',
-    { contrast: .3, sat: 1.15, wb: [.98, 1, 1.03], hsl: { g: [2, .08, 0], c: [0, .1, 0], b: [-4, .15, -.06] }, grain: .1, gsize: .8 }),
+    { contrast: .3, sat: 1.15, wb: [.98, 1, 1.03], hsl: { g: [2, .08, 0], c: [0, .1, 0], b: [-4, .15, -.06] }, grain: .07, gsize: .8 }),
   film('trix', 'Tri-X 400', 'TRI-X', 'KODAK', '400TX', 'bw', 'B&W', 400, '#e6c229',
     '最经典的新闻纪实黑白片：颗粒粗犷、反差有力。',
     { bw: [.30, .60, .10], contrast: .55, pivot: .42, grain: .55, gsize: 1.6, halation: .06 }),
@@ -664,10 +664,10 @@ void main(){
   vec2 px = vUv * uRes.xy;
   float cellTrue = uFx.y * max(uRes.x, uRes.y) / 2400.0;
   float cell = max(cellTrue, 0.75);
-  float att = mix(0.5, 1.0, smoothstep(0.3, 1.2, cellTrue));
+  float att = clamp(cellTrue * 1.1, 0.35, 1.0);
   vec2 gp = px / cell + uRes.z;
   vec3 gn = vec3(grainAt(gp) - 0.5);
-  if (uFilmB.z < 0.5) gn += uFx.z * (vec3(grainAt(gp + 13.7), grainAt(gp + 41.3), grainAt(gp + 77.9)) - 0.5);
+  if (uFilmB.z < 0.5) gn += uFx.z * att * (vec3(grainAt(gp + 13.7), grainAt(gp + 41.3), grainAt(gp + 77.9)) - 0.5);
   float y2 = luma(c);
   c += gn * uFx.x * att * (0.1 + 3.6 * y2 * (1.0 - y2)) * 0.45;
   c += (hash12(px * 0.73 + 3.1) - 0.5) * uPrint.y;
